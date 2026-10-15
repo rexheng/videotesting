@@ -1,5 +1,5 @@
 // People storage: load, validate and save signed-up people in localStorage, validate names typed at
-// sign-up, and create new person records.
+// sign-up, and create (or update the shirt of) person records.
 // Pure module: no DOM, no CDN imports. The storage object is a parameter, so it runs under Node.
 // Storage may be missing, blocked (private mode, blocked site data) or full, so nothing here throws.
 //
@@ -134,4 +134,13 @@ export function newPerson({ name, faceEmbeddings, shirtHistogram, shirtSwatch },
     shirtSwatch,
     createdAt: now,
   };
+}
+
+/**
+ * A copy of `person` with a new shirt (after Re-scan shirt). The histogram becomes a plain number
+ * array rounded to 4 decimals, as in newPerson. The new object (and new histogram) lets the live
+ * tagger tell that the shirt changed. Inputs are not modified.
+ */
+export function withNewShirt(person, { shirtHistogram, shirtSwatch }) {
+  return { ...person, shirtHistogram: Array.from(shirtHistogram, round4), shirtSwatch };
 }

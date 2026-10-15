@@ -1,7 +1,8 @@
 // The live tagging pipeline and app state. Each video frame: detect faces and bodies, follow them
 // with the Tracker, recognise faces (throttled) and, for people whose face is hidden, shirts; then
-// draw name labels over the mirrored video. Task 10 adds sign-up (enrolment) methods to the object
-// createApp returns, reusing the per-frame helpers below.
+// draw name labels over the mirrored video. While someone signs up (or re-scans their shirt), the
+// same frame also feeds the sign-up state machine with the largest face and torso in view; live
+// tagging keeps running. The app owns the list of people and saves it whenever it changes.
 //
 // Coordinates: MediaPipe landmarks are normalised (0-1) and are converted to pixels of the raw,
 // unmirrored frame. Only drawLabels mirrors, to match the mirrored video.
@@ -12,10 +13,27 @@ import { yawDegrees, bboxOfPoints } from './vision/geometry.js';
 import { buildObservations, Tracker } from './recognition/tracker.js';
 import { assignFaces, matchShirt } from './recognition/matcher.js';
 import { torsoQuad, shirtHistogram, blendHistograms } from './recognition/shirt.js';
+import { createEnrolment, enrolmentWantsEmbedding, stepEnrolment } from './enrol/enrolment.js';
+import { newPerson, withNewShirt } from './storage.js';
 import { drawLabels } from './ui/overlay.js';
 
 const hasFace = (track) => track.observation.faceIndex !== null;
 const isFaceMatch = (track) => track.status === 'match' && track.source === 'face';
+const areaOf = (box) => box.width * box.height;
+
+/** The item with the largest area (by areaOfItem), or null for an empty list. */
+function largest(items, areaOfItem) {
+  let best = null;
+  let bestArea = -Infinity;
+  for (const item of items) {
+    const area = areaOfItem(item);
+    if (area > bestArea) {
+      best = item;
+      bestArea = area;
+    }
+  }
+  return best;
+}
 
 function createCanvas() {
   return typeof OffscreenCanvas === 'function' ? new OffscreenCanvas(1, 1) : document.createElement('canvas');
@@ -26,11 +44,24 @@ function createCanvas() {
  *   video     the playing <video> showing the camera (raw, unmirrored pixels)
  *   overlay   the <canvas> drawn over the video
  *   models    { face, pose, sface } from loadModels({ runningMode: 'VIDEO' })
- *   store     from createStore(); people are loaded from it now
+ *   store     from createStore(); people are loaded from it now, and saved to it on every change
  *   onLabels  called with each frame's labels ({ trackId, box, personId, text }[])
  *   onDebug   optional; called each frame with { faceMs, poseMs, embedMs, embeds, faces, poses, yaw }
+ *   onEnrolUpdate   called with the sign-up state when it starts and after each frame it runs
+ *                   (the last one has step 'done'), or with null when it is cancelled
+ *   onPeopleChange  called with (people, saved) after the people change and are saved; saved is
+ *                   false when store.save failed
  */
-export function createApp({ video, overlay, models, store, onLabels = () => {}, onDebug = null }) {
+export function createApp({
+  video,
+  overlay,
+  models,
+  store,
+  onLabels = () => {},
+  onDebug = null,
+  onEnrolUpdate = () => {},
+  onPeopleChange = () => {},
+}) {
   const { face, pose, sface } = models;
   const overlayCtx = overlay.getContext('2d');
   const tracker = new Tracker();
@@ -40,6 +71,8 @@ export function createApp({ video, overlay, models, store, onLabels = () => {}, 
   // personId -> histogram refreshed from confident face matches (handles lighting changes).
   // In memory only: never saved automatically.
   const liveShirts = new Map();
+  // The sign-up in progress: { state, personId } (personId is set for Re-scan shirt), or null.
+  let enrolment = null;
 
   // A copy of the current frame, drawn at most once per frame and only when pixels are needed
   // (face embeddings and shirt histograms), so every read in a frame sees the same pixels.
@@ -185,6 +218,68 @@ export function createApp({ video, overlay, models, store, onLabels = () => {}, 
     }
   }
 
+  /**
+   * Sign-up input for this frame, chosen before anything awaits: the largest face (its yaw, and
+   * whether the sign-up wants it embedded) and the largest torso. Null when nobody is signing up.
+   */
+  function planSignUp(frame) {
+    if (!enrolment) return null;
+    const { faceLandmarks, torsos, width, height, now } = frame;
+    const landmarks = largest(faceLandmarks, (points) =>
+      areaOf(bboxOfPoints(points.map((p) => [p.x * width, p.y * height]))),
+    );
+    let face = null;
+    if (landmarks) {
+      const yaw = yawDegrees(landmarks);
+      face = { landmarks, yaw, embed: enrolmentWantsEmbedding(enrolment.state, yaw, now) };
+    }
+    let quad = null;
+    if (enrolment.state.step === 'shirt') {
+      const quads = [...torsos.values()].filter(Boolean);
+      quad = largest(quads, (points) => areaOf(bboxOfPoints(points)));
+    }
+    return { session: enrolment, face, quad };
+  }
+
+  /** Step 8: feed the sign-up this frame's face and shirt; when it is done, save the person. */
+  async function stepSignUp(frame, plan) {
+    const { width, height, now, stats } = frame;
+    let embedding = null;
+    if (plan.face?.embed) {
+      const start = performance.now();
+      embedding = await embedInSnapshot(plan.face.landmarks, width, height);
+      stats.embedMs += performance.now() - start;
+      if (embedding) stats.embeds += 1;
+    }
+    // Cancelled, or a new sign-up started, while the face was being embedded.
+    if (enrolment !== plan.session) return;
+    // The person whose shirt is being re-scanned has gone (deletePerson cancels this already).
+    if (plan.session.personId !== null && !peopleById.has(plan.session.personId)) {
+      cancelEnrolment();
+      return;
+    }
+
+    const shirt = plan.quad ? shirtInQuad(plan.quad, width, height) : null;
+    const face = plan.face ? { yaw: plan.face.yaw, embedding } : null;
+    const state = stepEnrolment(plan.session.state, { face, shirt }, now);
+    plan.session.state = state;
+    if (state.step === 'done') {
+      enrolment = null;
+      finishSignUp(plan.session.personId, state);
+    }
+    onEnrolUpdate(state);
+  }
+
+  /** Add the new person, or give the re-scanned person their new shirt, and save everyone. */
+  function finishSignUp(personId, { name, result }) {
+    if (personId === null) {
+      savePeople([...people, newPerson({ name, ...result }, people, Date.now())]);
+      return;
+    }
+    // A new person object (and histogram), so setPeople drops their old live shirt.
+    savePeople(people.map((person) => (person.id === personId ? withNewShirt(person, result) : person)));
+  }
+
   const colourFor = (personId) => peopleById.get(personId)?.colour ?? LABEL_COLOURS[0];
 
   /**
@@ -224,11 +319,13 @@ export function createApp({ video, overlay, models, store, onLabels = () => {}, 
         torsos.set(track.id, poseIndex === null ? null : torsoQuad(poseLandmarks[poseIndex], width, height));
       }
       const frame = { now, width, height, faceLandmarks, poseLandmarks, tracks, torsos, stats };
+      const signUp = planSignUp(frame);
 
       // Copy the frame now, before anything awaits, if any step below will read its pixels.
       const toEmbed = tracksToEmbed(tracks, now);
       const needsPixels =
         toEmbed.length > 0 ||
+        Boolean(signUp && (signUp.face?.embed || signUp.quad)) ||
         tracks.some(
           (track) =>
             torsos.get(track.id) &&
@@ -245,6 +342,10 @@ export function createApp({ video, overlay, models, store, onLabels = () => {}, 
       const labels = tracker.labels(peopleById);
       drawLabels(overlayCtx, labels, { width, colourFor });
       onLabels(labels);
+
+      // 8. Sign-up, while someone is signing up.
+      if (signUp) await stepSignUp(frame, signUp);
+
       onDebug?.({
         ...stats,
         faces: faceLandmarks.length,
@@ -320,5 +421,49 @@ export function createApp({ video, overlay, models, store, onLabels = () => {}, 
     }
   }
 
-  return { start, stop, getPeople, setPeople, processFrame };
+  /** Replace the people, save them and report the change. Returns false when the save failed. */
+  function savePeople(next) {
+    setPeople(next);
+    const saved = store.save(people);
+    onPeopleChange(getPeople(), saved);
+    return saved;
+  }
+
+  /**
+   * Start signing up `name`, replacing any sign-up in progress. With `personId` (an existing
+   * person) only the shirt is scanned: Re-scan shirt. `now` is a performance.now()-style time.
+   * Reports the first state through onEnrolUpdate and returns it.
+   */
+  function startEnrolment(name, { personId = null, now = performance.now() } = {}) {
+    if (personId !== null && !peopleById.has(personId)) throw new Error(`No person with id ${personId}`);
+    const state = createEnrolment(name, now, personId === null ? {} : { startAt: 'shirt' });
+    enrolment = { state, personId };
+    onEnrolUpdate(state);
+    return state;
+  }
+
+  /** Discard the sign-up in progress, if any (reports null through onEnrolUpdate). */
+  function cancelEnrolment() {
+    if (!enrolment) return;
+    enrolment = null;
+    onEnrolUpdate(null);
+  }
+
+  /** Remove a person and save. A re-scan of that person's shirt is cancelled first. */
+  function deletePerson(personId) {
+    if (!peopleById.has(personId)) return;
+    if (enrolment?.personId === personId) cancelEnrolment();
+    savePeople(people.filter((person) => person.id !== personId));
+  }
+
+  return {
+    start,
+    stop,
+    getPeople,
+    setPeople,
+    processFrame,
+    startEnrolment,
+    cancelEnrolment,
+    deletePerson,
+  };
 }

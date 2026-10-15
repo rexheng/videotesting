@@ -1,9 +1,12 @@
-// Start-up and wiring: camera, then the face models, then the live tagging app.
+// Start-up and wiring: camera, then the face models, then the live tagging app, the sign-up panel
+// and the People list.
 import { startCamera, classifyCameraError, cameraErrorMessage } from './camera.js';
 import { loadModels } from './vision/models.js';
-import { createStore, NOT_SAVED_MESSAGE } from './storage.js';
+import { createStore, validateName, NOT_SAVED_MESSAGE } from './storage.js';
 import { createApp } from './app.js';
 import { createDebugPanel } from './ui/debugPanel.js';
+import { createEnrolPanel } from './ui/enrolPanel.js';
+import { renderPeopleList } from './ui/peopleList.js';
 
 const LOADING_MESSAGE = 'Loading face models…';
 const MODELS_FAILED_MESSAGE = "Couldn't download the face models. Check your internet connection.";
@@ -13,6 +16,10 @@ const overlay = document.getElementById('overlay');
 const status = document.getElementById('status');
 const liveTags = document.getElementById('live-tags');
 const debugPre = document.getElementById('debug');
+const addPerson = document.getElementById('add-person');
+const enrolSection = document.getElementById('enrol-panel');
+const peopleHeading = document.getElementById('people-heading');
+const peopleList = document.getElementById('people-list');
 
 function showStatus(text) {
   status.textContent = text;
@@ -21,6 +28,11 @@ function showStatus(text) {
 /** Tell the user people will not be kept: storage is unavailable, or a save failed. */
 function showNotSaved() {
   showStatus(NOT_SAVED_MESSAGE);
+}
+
+/** After a save that worked, an earlier "not saved" warning no longer applies: everyone is saved now. */
+function clearNotSaved() {
+  if (status.textContent === NOT_SAVED_MESSAGE) showStatus('');
 }
 
 function showModelsFailed() {
@@ -77,7 +89,61 @@ async function main() {
   showStatus('');
   if (!store.available) showNotSaved();
 
-  const app = createApp({ video, overlay, models, store, onLabels: showLiveTags, onDebug: debugPanel?.update });
+  // The panel's buttons only work once the app exists, which is when "Add person" is enabled.
+  const panel = createEnrolPanel(enrolSection, {
+    onStart(name) {
+      const checked = validateName(name, app.getPeople());
+      if (checked.ok) app.startEnrolment(checked.name);
+      else panel.showError(checked.error);
+    },
+    onCancel: () => app.cancelEnrolment(),
+    onHide(hadFocus) {
+      addPerson.disabled = false;
+      if (hadFocus) addPerson.focus();
+    },
+  });
+
+  function showPeople(people) {
+    renderPeopleList(peopleList, people, {
+      onRescan(personId) {
+        const person = app.getPeople().find((p) => p.id === personId);
+        if (!person) return;
+        addPerson.disabled = true;
+        app.startEnrolment(person.name, { personId });
+      },
+      onDelete(personId) {
+        app.deletePerson(personId);
+        // The row (and the focused button) has gone; keep keyboard focus nearby.
+        peopleHeading.focus();
+      },
+    });
+  }
+
+  const app = createApp({
+    video,
+    overlay,
+    models,
+    store,
+    onLabels: showLiveTags,
+    onDebug: debugPanel?.update,
+    onEnrolUpdate(state) {
+      if (state) panel.update(state);
+      else panel.hide();
+    },
+    onPeopleChange(people, saved) {
+      showPeople(people);
+      if (saved) clearNotSaved();
+      else showNotSaved();
+    },
+  });
+
+  showPeople(app.getPeople());
+  addPerson.addEventListener('click', () => {
+    // One sign-up at a time: "Add person" comes back when the panel closes.
+    addPerson.disabled = true;
+    panel.showNameForm();
+  });
+  addPerson.disabled = false;
   app.start();
 }
 

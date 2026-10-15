@@ -19,9 +19,11 @@
       </div>
 
       <aside id="sidebar">
-        <button id="add-person" type="button">Add person</button>
+        <!-- Enabled once the face models have loaded. -->
+        <button id="add-person" type="button" aria-controls="enrol-panel" disabled>Add person</button>
         <section id="enrol-panel" hidden></section>
-        <ul id="people-list"></ul>
+        <h2 id="people-heading" tabindex="-1">People</h2>
+        <ul id="people-list" aria-labelledby="people-heading"></ul>
       </aside>
     </main>
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createStore, validateName, newPerson, NOT_SAVED_MESSAGE } from '../../src/storage.js';
+import { createStore, validateName, newPerson, withNewShirt, NOT_SAVED_MESSAGE } from '../../src/storage.js';
 import { STORAGE_KEY, NAME_MAX, LABEL_COLOURS } from '../../src/config.js';
 
 /** In-memory stand-in for localStorage with just getItem and setItem. */
@@ -315,4 +315,23 @@ test('colour assignment cycles once every colour is used', () => {
     assert.equal(person.colour, LABEL_COLOURS[i % LABEL_COLOURS.length], `person ${i}`);
     people.push(person);
   }
+});
+
+test('withNewShirt returns a new person with the new shirt, rounded like newPerson, and the rest unchanged', () => {
+  const person = samplePerson({ name: 'Hana', shirtSwatch: '#000000' });
+  const before = JSON.parse(JSON.stringify(person));
+  const shirt = Float32Array.from([0.123456, 0.25]);
+  const updated = withNewShirt(person, { shirtHistogram: shirt, shirtSwatch: '#00ffff' });
+
+  assert.notEqual(updated, person);
+  assert.ok(Array.isArray(updated.shirtHistogram));
+  assert.deepEqual(updated.shirtHistogram, [0.1235, 0.25]);
+  assert.equal(updated.shirtSwatch, '#00ffff');
+  const { shirtHistogram, shirtSwatch, ...rest } = updated;
+  const { shirtHistogram: oldHistogram, shirtSwatch: oldSwatch, ...oldRest } = before;
+  assert.deepEqual(rest, oldRest);
+  assert.equal(updated.faceEmbeddings, person.faceEmbeddings);
+  // Inputs are not changed.
+  assert.deepEqual(person, before);
+  assert.deepEqual(Array.from(shirt), [Math.fround(0.123456), 0.25]);
 });

@@ -32,6 +32,7 @@ export const SAMPLES_PER_STEP = 5;
 export const SAMPLE_GAP_MS = 150;
 export const NO_FACE_TIP_MS = 3000;
 export const STUCK_TIP_MS = 8000;
+export const ENROL_DONE_MS = 2000; // how long the "Done!" message stays before the panel closes
 
 // Torso region used for shirt sampling.
 export const SHOULDER_VISIBILITY = 0.6;
