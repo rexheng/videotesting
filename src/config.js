@@ -7,6 +7,7 @@ export const VERSIONS = { mediapipe: '1.0.1', ort: '1.30.0' };
 export const FACE_MATCH = 0.363;
 export const FACE_UNSURE = 0.30;
 export const EMBED_RECHECK_MS = 1000;
+export const UNKNOWN_RECHECK_MS = 250;
 export const MAX_EMBEDS_PER_FRAME = 2;
 
 // Box tracking between frames.
@@ -35,6 +36,7 @@ export const STUCK_TIP_MS = 8000;
 // Torso region used for shirt sampling.
 export const SHOULDER_VISIBILITY = 0.6;
 export const HIP_VISIBILITY = 0.5;
+export const BODY_VISIBILITY = 0.5;
 export const MIN_TORSO_PX = 40;
 export const TORSO_SHRINK = 0.15;
 export const MAX_SHIRT_SAMPLES = 2000;

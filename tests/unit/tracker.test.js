@@ -1,7 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildObservations, Tracker } from '../../src/recognition/tracker.js';
-import { TRACK_IOU, TRACK_TTL_MS, EMBED_RECHECK_MS } from '../../src/config.js';
+import {
+  TRACK_IOU,
+  TRACK_TTL_MS,
+  EMBED_RECHECK_MS,
+  UNKNOWN_RECHECK_MS,
+  BODY_VISIBILITY,
+} from '../../src/config.js';
 
 const people = new Map([
   ['alice', { name: 'Alice' }],
@@ -34,6 +40,8 @@ test('config thresholds are the values the brief assumes', () => {
   assert.equal(TRACK_IOU, 0.3);
   assert.equal(TRACK_TTL_MS, 1000);
   assert.equal(EMBED_RECHECK_MS, 1000);
+  assert.equal(UNKNOWN_RECHECK_MS, 250);
+  assert.equal(BODY_VISIBILITY, 0.5);
 });
 
 // ---------------------------------------------------------------- associate
@@ -298,21 +306,53 @@ test('needsEmbedding: false when the track has no face this frame', () => {
   assert.equal(tracker.needsEmbedding(track, 5000), false);
 });
 
-test('needsEmbedding: true straight away unless the track is a confident face match', () => {
+test('needsEmbedding: a brand-new track with a face embeds immediately', () => {
+  const { tracker, track } = singleTrack({ withFace: true, now: 12345 });
+  assert.equal(track.lastEmbedAt, -Infinity);
+  assert.equal(tracker.needsEmbedding(track, 12345), true);
+});
+
+test('R10: an unknown face is rechecked on the UNKNOWN_RECHECK_MS cadence, not every frame', () => {
+  const { tracker, track } = singleTrack({ withFace: true });
+  tracker.applyFace(track.id, { personId: null, score: 0.1, status: 'unknown' }, 0);
+  assert.equal(tracker.needsEmbedding(track, 0), false);
+  assert.equal(tracker.needsEmbedding(track, 100), false);
+  assert.equal(tracker.needsEmbedding(track, UNKNOWN_RECHECK_MS - 1), false);
+  assert.equal(tracker.needsEmbedding(track, UNKNOWN_RECHECK_MS), true);
+  assert.equal(UNKNOWN_RECHECK_MS < EMBED_RECHECK_MS, true);
+});
+
+test('R10: an unsure face is rechecked on the UNKNOWN_RECHECK_MS cadence', () => {
   const { tracker, track } = singleTrack({ withFace: true });
   tracker.applyFace(track.id, { personId: 'alice', score: 0.33, status: 'unsure' }, 0);
-  assert.equal(tracker.needsEmbedding(track, 1), true);
+  assert.equal(tracker.needsEmbedding(track, 100), false);
+  assert.equal(tracker.needsEmbedding(track, UNKNOWN_RECHECK_MS), true);
+});
 
-  const other = new Tracker();
-  const [unknown] = other.associate([observation(BOX, true)], 0);
-  other.applyFace(unknown.id, { personId: null, score: 0.1, status: 'unknown' }, 0);
-  assert.equal(other.needsEmbedding(unknown, 1), true);
+test('R10: a shirt-named track with a face this frame is also on the UNKNOWN_RECHECK_MS cadence', () => {
+  const tracker = new Tracker();
+  // Face seen and embedded at t=0 (stranger), then the person turns away and is named by shirt.
+  const [first] = tracker.associate([observation(BOX, true)], 0);
+  tracker.applyFace(first.id, { personId: null, score: 0.1, status: 'unknown' }, 0);
+  const [hidden] = tracker.associate([observation(BOX, false)], 100);
+  tracker.applyShirt(hidden.id, { personId: 'bob', score: 0.9 });
+  assert.equal(hidden.source, 'shirt');
 
-  const shirted = new Tracker();
-  const [hidden] = shirted.associate([observation(BOX, false)], 0);
-  shirted.applyShirt(hidden.id, { personId: 'bob', score: 0.9 });
-  const [shown] = shirted.associate([observation(BOX, true)], 10);
-  assert.equal(shirted.needsEmbedding(shown, 10), true); // a shirt-sourced name is never "face confirmed"
+  // The face comes back: not re-embedded every frame, but again on the 250 ms cadence.
+  const [shown] = tracker.associate([observation(BOX, true)], 150);
+  assert.equal(shown.id, first.id);
+  assert.equal(tracker.needsEmbedding(shown, 150), false);
+  assert.equal(tracker.needsEmbedding(shown, UNKNOWN_RECHECK_MS - 1), false);
+  assert.equal(tracker.needsEmbedding(shown, UNKNOWN_RECHECK_MS), true);
+  assert.equal(tracker.needsEmbedding(shown, EMBED_RECHECK_MS - 1), true); // not held to the 1 s cadence
+});
+
+test('R10: a shirt-named track that has never been embedded embeds as soon as its face shows', () => {
+  const tracker = new Tracker();
+  const [hidden] = tracker.associate([observation(BOX, false)], 0);
+  tracker.applyShirt(hidden.id, { personId: 'bob', score: 0.9 });
+  const [shown] = tracker.associate([observation(BOX, true)], 10);
+  assert.equal(tracker.needsEmbedding(shown, 10), true);
 });
 
 // ---------------------------------------------------------------- applyFace rules
@@ -374,6 +414,21 @@ test('a later face match replaces an unsure one and a different match replaces t
   assert.deepEqual(textsOf(tracker.labels(people)), ['Alice']);
   tracker.applyFace(track.id, { personId: 'bob', score: 0.6, status: 'match' }, 1100);
   assert.deepEqual(textsOf(tracker.labels(people)), ['Bob']);
+});
+
+test('R9: an unsure face overrides a name the track got from its shirt', () => {
+  const tracker = new Tracker();
+  const [hidden] = tracker.associate([observation(BOX, false)], 0);
+  tracker.applyShirt(hidden.id, { personId: 'bob', score: 0.9 });
+  assert.deepEqual(textsOf(tracker.labels(people)), ['Bob 👕']);
+
+  const [shown] = tracker.associate([observation(BOX, true)], 100);
+  tracker.applyFace(shown.id, { personId: 'alice', score: 0.33, status: 'unsure' }, 100);
+  assert.equal(shown.personId, 'alice');
+  assert.equal(shown.source, 'face');
+  assert.equal(shown.status, 'unsure');
+  assert.equal(shown.score, 0.33);
+  assert.deepEqual(textsOf(tracker.labels(people)), ['Alice?']);
 });
 
 test('R4: an unknown face clears a name the track got from a face match', () => {
@@ -489,8 +544,17 @@ test('buildObservations: an unlinked pose becomes a pose-only observation', () =
   assertBox(only.box, { x: 100, y: 100, width: 200, height: 350 }, 'only.box');
 });
 
-test('buildObservations: the body box ignores landmarks below visibility 0.5', () => {
-  const poses = [poseOf([0.2, 0.2], [[0.3, 0.4, 0.5], [0.9, 0.9, 0.49], [0.0, 0.0, 0.1]])];
+test('buildObservations: the body box ignores landmarks below BODY_VISIBILITY', () => {
+  const poses = [
+    poseOf(
+      [0.2, 0.2],
+      [
+        [0.3, 0.4, BODY_VISIBILITY],
+        [0.9, 0.9, BODY_VISIBILITY - 0.01],
+        [0.0, 0.0, BODY_VISIBILITY - 0.4],
+      ],
+    ),
+  ];
   const [only] = buildObservations([], poses, 1000, 1000);
   assertBox(only.box, { x: 200, y: 200, width: 100, height: 200 }, 'only.box');
 });
@@ -498,8 +562,8 @@ test('buildObservations: the body box ignores landmarks below visibility 0.5', (
 test('buildObservations: a pose with no visible landmarks makes no observation', () => {
   const blind = {
     landmarks: [
-      { x: 0.5, y: 0.5, z: 0, visibility: 0.2 },
-      { x: 0.6, y: 0.7, z: 0, visibility: 0.4 },
+      { x: 0.5, y: 0.5, z: 0, visibility: BODY_VISIBILITY - 0.3 },
+      { x: 0.6, y: 0.7, z: 0, visibility: BODY_VISIBILITY - 0.1 },
     ],
   };
   assert.deepEqual(buildObservations([], [blind], 1000, 500), []);

@@ -9,11 +9,15 @@
 //   associate -> embed faces where needsEmbedding -> applyFace -> shirt-match face-hidden
 //   tracks -> applyShirt -> labels.
 
-import { TRACK_IOU, TRACK_TTL_MS, EMBED_RECHECK_MS } from '../config.js';
+import {
+  TRACK_IOU,
+  TRACK_TTL_MS,
+  EMBED_RECHECK_MS,
+  UNKNOWN_RECHECK_MS,
+  BODY_VISIBILITY,
+} from '../config.js';
 import { bboxOfPoints, iou, containsPoint } from '../vision/geometry.js';
 
-/** A pose landmark counts toward the body box only at or above this visibility. */
-const BODY_VISIBILITY = 0.5;
 /** MediaPipe pose landmark 0 is the nose. */
 const NOSE = 0;
 
@@ -74,6 +78,9 @@ export function buildObservations(faces, poses, width, height) {
 }
 
 const hasFace = (track) => track.observation.faceIndex !== null;
+
+/** A confident face-sourced identity: a 'match' that came from a face, not from a shirt. */
+const isFaceMatch = (track) => track.status === 'match' && track.source === 'face';
 
 /** A track that currently has a name it earned from a face and can see that face. */
 const faceConfirmed = (track) => track.source === 'face' && hasFace(track);
@@ -144,16 +151,15 @@ export class Tracker {
   }
 
   /**
-   * True when the track has a face this frame and its name is not a recent, confirmed face match:
-   * not yet 'match', named by shirt rather than face, or last embedded EMBED_RECHECK_MS ago.
+   * True when the track has a face this frame and it is due an embedding. A confident face match
+   * is rechecked every EMBED_RECHECK_MS; anything else (no name yet, unknown, unsure, or named by
+   * shirt) is retried every UNKNOWN_RECHECK_MS so strangers do not cost an embedding per frame.
+   * A new track has lastEmbedAt = -Infinity, so it embeds immediately.
    */
   needsEmbedding(track, now) {
     if (!hasFace(track)) return false;
-    return (
-      track.status !== 'match' ||
-      track.source !== 'face' ||
-      now - track.lastEmbedAt >= EMBED_RECHECK_MS
-    );
+    const interval = isFaceMatch(track) ? EMBED_RECHECK_MS : UNKNOWN_RECHECK_MS;
+    return now - track.lastEmbedAt >= interval;
   }
 
   /**
@@ -162,7 +168,8 @@ export class Tracker {
    *  - anything else records lastEmbedAt = now, then:
    *  - 'match': the track is that person, sourced from the face. A face match always overrides a
    *    shirt match.
-   *  - 'unsure': applied only if the track has no confident ('match') identity.
+   *  - 'unsure': applied unless the track already has a confident face match (a face-sourced
+   *    'match'); it does override a shirt-based name, since a visible face is judged by the face.
    *  - 'unknown': a face was visible and embedded and matched nobody, so it is not the tagged
    *    person (people may have swapped places): any name, from face or shirt, is cleared.
    */
@@ -177,7 +184,7 @@ export class Tracker {
       track.source = 'face';
       track.status = 'match';
     } else if (status === 'unsure') {
-      if (track.personId !== null && track.status === 'match') return;
+      if (isFaceMatch(track)) return;
       track.personId = personId;
       track.score = score;
       track.source = 'face';
