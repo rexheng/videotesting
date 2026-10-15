@@ -24,7 +24,8 @@ test('shows the camera', async ({ page }) => {
       }),
     )
     .toEqual([640, 480, 640, 480]);
-  await expect(page.locator('#status')).toHaveText('');
+  // No camera error: the status only shows "Loading face models…" until the models are ready.
+  await expect(page.locator('#status')).toHaveText('', { timeout: 60_000 });
 });
 
 test('shows blocked message', async ({ page }) => {
