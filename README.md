@@ -1,6 +1,6 @@
 # Face + Shirt Tagger
 
-A small web app that uses your live webcam, entirely in the browser, to sign people up by their face and the colour of their shirt, and then tag them live as they appear on camera. Face is the main way it recognises someone. The shirt is the backup for when the face is hidden, for example when the person turns away. There is no build step.
+A small web app that uses your live webcam, entirely in the browser, to sign people up by their face and the colour of their shirt, and then tag them live as they appear on camera. Face is the main way it recognises someone. The shirt is the backup for when the face is hidden, for example when the person turns away. There is no bundler: the browser runs the source files as they are.
 
 ## How to use it
 
@@ -56,6 +56,30 @@ npm start        # serves the app: open http://localhost:8080
 
 Browsers only allow the camera on `localhost` or `https://` pages. Add `?debug=1` to the address to see the frame rate, per-model timings and head-turn angle.
 
+## Deploy to Cloudflare Pages
+
+The app is a static site, so it deploys to Cloudflare Pages straight from GitHub:
+
+1. In the Cloudflare dashboard, go to **Workers & Pages** → **Create** → **Pages** → **Import an existing Git repository**.
+2. Connect GitHub and pick `rexheng/videotesting` (private repositories work too).
+3. Set **Build command** to `npm run build` and **Build output directory** to `dist`. Leave **Production branch** as `main`.
+4. Click **Save and Deploy**.
+
+Every pushed branch gets its own preview URL, and the production URL updates when `main` changes. Pages serves everything over HTTPS, which the camera needs.
+
+`npm run build` (`scripts/build.js`, no dependencies) deletes and recreates `dist/` and copies only `index.html`, `styles.css`, `src/` and `models/` into it. It prints the number of files and the largest one, and fails if any file is over 25 MiB (26,214,400 bytes), which is Cloudflare Pages' limit per file.
+
+### Why the face model is in two parts
+
+The SFace model is 38,696,353 bytes, which is over that limit, so it is stored as two files and the browser joins them (`concatParts` in `src/vision/models.js`). The browser also checks the joined size and its SHA-256 (`0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79`) before using it. The parts were made from the original `face_recognition_sface_2021dec.onnx` (OpenCV Zoo) with:
+
+```sh
+head -c 20971520  face_recognition_sface_2021dec.onnx > face_recognition_sface_2021dec.onnx.part1   # first 20 MiB
+tail -c +20971521 face_recognition_sface_2021dec.onnx > face_recognition_sface_2021dec.onnx.part2   # the other 17,724,833 bytes
+```
+
+To rebuild the original file, join them in order: `cat face_recognition_sface_2021dec.onnx.part1 face_recognition_sface_2021dec.onnx.part2 > face_recognition_sface_2021dec.onnx`.
+
 ## Testing
 
 ```sh
@@ -63,7 +87,7 @@ npm test         # unit tests (Node, no browser)
 npm run test:e2e # browser tests (Playwright, headless Chromium, with a fake camera)
 ```
 
-- The unit tests cover the pure logic: geometry and head turn, shirt colours, face and shirt matching, tracking, the sign-up steps and storage.
+- The unit tests cover the pure logic: geometry and head turn, shirt colours, face and shirt matching, tracking, the sign-up steps and storage. They also check that the two SFace parts join into the verified model and that `npm run build` produces a deployable `dist/`.
 - The browser tests replace the webcam with a canvas that shows photos from `tests/fixtures/faces/` (see `CREDITS.md` there). They load the real models, so they need internet access. They check camera errors, live tagging, sign-up, the People list and blocked storage. `tests/e2e/pipeline.spec.js` drives the per-frame pipeline and a full sign-up with stand-in models.
 - `scripts/reference_embeddings.py` computes OpenCV's own face embeddings for the fixtures. The browser tests check that ours agree with them.
 

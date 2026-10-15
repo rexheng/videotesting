@@ -11,9 +11,10 @@
       import { embedFace } from '../../../src/vision/faceEmbedder.js';
       import { fivePoints, yawDegrees } from '../../../src/vision/geometry.js';
 
-      // ?sface=models/other.onnx swaps the SFace model (path relative to the app root).
-      const sfaceUrl = new URLSearchParams(location.search).get('sface') ?? undefined;
-      window.modelsReady = loadModels({ runningMode: 'IMAGE', sfaceUrl });
+      // ?sface=models/other.onnx swaps the SFace model. It is a comma-separated list of part URLs
+      // (relative to the app root), joined in order; a single URL is a one-part model.
+      const sfaceParts = new URLSearchParams(location.search).get('sface')?.split(',');
+      window.modelsReady = loadModels({ runningMode: 'IMAGE', sfaceParts });
 
       async function loadImage(url) {
         const img = new Image();
