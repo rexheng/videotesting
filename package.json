@@ -1,0 +1,15 @@
+{
+  "name": "face-shirt-tagger",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sign people up by face and shirt with the live webcam, then tag them live in the browser.",
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/serve.js",
+    "test": "node --test \"tests/unit/*.test.js\"",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
+  }
+}

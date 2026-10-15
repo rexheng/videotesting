@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Face + Shirt Tagger</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="page-header">
+      <h1>Face + Shirt Tagger</h1>
+      <p id="status" role="status"></p>
+    </header>
+
+    <main class="layout">
+      <div id="stage">
+        <video id="camera" playsinline muted autoplay></video>
+        <canvas id="overlay"></canvas>
+      </div>
+
+      <aside id="sidebar">
+        <button id="add-person" type="button">Add person</button>
+        <section id="enrol-panel" hidden></section>
+        <ul id="people-list"></ul>
+      </aside>
+    </main>
+
+    <ul id="live-tags" class="visually-hidden"></ul>
+    <pre id="debug" hidden></pre>
+
+    <script type="module" src="src/main.js"></script>
+  </body>
+</html>
