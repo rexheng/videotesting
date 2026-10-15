@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <title>Face embedding harness</title>
+  </head>
+  <body>
+    <p>Test harness: loads the face models and embeds still images. Driven by tests/e2e/faceEmbedding.spec.js.</p>
+    <script type="module">
+      import { loadModels } from '../../../src/vision/models.js';
+      import { embedFace } from '../../../src/vision/faceEmbedder.js';
+      import { fivePoints, yawDegrees } from '../../../src/vision/geometry.js';
+
+      // ?sface=models/other.onnx swaps the SFace model (path relative to the app root).
+      const sfaceUrl = new URLSearchParams(location.search).get('sface') ?? undefined;
+      window.modelsReady = loadModels({ runningMode: 'IMAGE', sfaceUrl });
+
+      async function loadImage(url) {
+        const img = new Image();
+        img.src = url;
+        await img.decode();
+        return img;
+      }
+
+      /** Detect the first face in the image at `url` and embed it. */
+      window.runEmbedding = async (url) => {
+        const { face, sface } = await window.modelsReady;
+        const img = await loadImage(url);
+        const width = img.naturalWidth;
+        const height = img.naturalHeight;
+
+        let start = performance.now();
+        const landmarks = face.detect(img).faceLandmarks[0];
+        const detectMs = performance.now() - start;
+        if (!landmarks) throw new Error(`No face found in ${url}`);
+
+        start = performance.now();
+        const embedding = await embedFace(sface, img, landmarks, width, height);
+        const embedMs = performance.now() - start;
+
+        return {
+          embedding: Array.from(embedding),
+          yaw: yawDegrees(landmarks),
+          points: fivePoints(landmarks, width, height),
+          detectMs,
+          embedMs,
+        };
+      };
+    </script>
+  </body>
+</html>
