@@ -117,6 +117,76 @@ test('People list shows each person with a shirt swatch, and Delete removes them
   expect(stored).toEqual([]);
 });
 
+test('People list buttons are disabled while the sign-up panel is open', async ({ page }) => {
+  await seedPeople(page, [personA]);
+  await installFakeCamera(page);
+  await page.goto('/');
+  await waitUntilReady(page);
+
+  const item = page.locator('#people-list li', { hasText: 'Person A' });
+  const rescan = item.getByRole('button', { name: 'Re-scan shirt' });
+  const remove = item.getByRole('button', { name: 'Delete' });
+  await expect(rescan).toBeEnabled();
+  await expect(remove).toBeEnabled();
+
+  await page.locator('#add-person').click();
+  await expect(rescan).toBeDisabled();
+  await expect(remove).toBeDisabled();
+
+  await page.locator('#enrol-panel').getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.locator('#enrol-panel')).toBeHidden();
+  await expect(rescan).toBeEnabled();
+  await expect(remove).toBeEnabled();
+});
+
+test('Re-scan shirt saves the new shirt; the list stays disabled until the done message has gone', async ({ page }) => {
+  await seedPeople(page, [personA]);
+  await installFakeCamera(page, '/tests/fixtures/faces/a1.jpg');
+  await page.goto('/');
+  await waitUntilReady(page);
+
+  // The done message shows for only 2 s, so record the list the moment it appears.
+  await page.evaluate(() => {
+    const prompt = document.querySelector('#enrol-prompt');
+    window.__atDone = null;
+    new MutationObserver(() => {
+      if (window.__atDone || prompt.textContent !== 'Shirt updated for Person A 👕') return;
+      window.__atDone = {
+        swatch: getComputedStyle(document.querySelector('#people-list .swatch')).backgroundColor,
+        listButtonsDisabled: [...document.querySelectorAll('#people-list button')].map((button) => button.disabled),
+        addPersonDisabled: document.querySelector('#add-person').disabled,
+      };
+    }).observe(prompt, { childList: true, characterData: true, subtree: true });
+  });
+
+  const item = page.locator('#people-list li', { hasText: 'Person A' });
+  await item.getByRole('button', { name: 'Re-scan shirt' }).click();
+  await expect(page.locator('#enrol-prompt')).toHaveText('Step back so we can see your shirt');
+  await expect(item.getByRole('button', { name: 'Re-scan shirt' })).toBeDisabled();
+  await expect(item.getByRole('button', { name: 'Delete' })).toBeDisabled();
+
+  // a1.jpg shows the shoulders, so the shirt step can finish.
+  await expect.poll(() => page.evaluate(() => window.__atDone), { timeout: 60_000 }).not.toBeNull();
+  const atDone = await page.evaluate(() => window.__atDone);
+  // The list had already been re-drawn with the new shirt, and its buttons were still disabled.
+  expect(atDone.swatch).not.toBe('rgb(128, 128, 128)');
+  expect(atDone.listButtonsDisabled).toEqual([true, true]);
+  expect(atDone.addPersonDisabled).toBe(true);
+
+  // Then the panel closes and everything is usable again.
+  await expect(page.locator('#enrol-panel')).toBeHidden({ timeout: 10_000 });
+  await expect(item.getByRole('button', { name: 'Re-scan shirt' })).toBeEnabled();
+  await expect(item.getByRole('button', { name: 'Delete' })).toBeEnabled();
+  await expect(page.locator('#add-person')).toBeEnabled();
+  await expect(page.locator('#add-person')).toBeFocused();
+
+  const [stored] = await page.evaluate((key) => JSON.parse(window.localStorage.getItem(key)), STORAGE_KEY);
+  expect(stored).toMatchObject({ id: 'person-a', name: 'Person A', colour: personA.colour, createdAt: 0 });
+  expect(stored.faceEmbeddings).toEqual(personA.faceEmbeddings);
+  expect(stored.shirtSwatch).not.toBe('#808080');
+  expect(stored.shirtHistogram).toHaveLength(28);
+});
+
 test('a failed save says people are not saved', async ({ page }) => {
   await seedPeople(page, [personA]);
   // Reading works, but every later write fails (e.g. storage full).

@@ -4,9 +4,10 @@
 /**
  * Fill `ul` with one <li> per person: a .swatch in their shirt colour, their name, and the buttons
  * Re-scan shirt and Delete. Delete asks "Delete {name}?" first and calls onDelete(id) only if the
- * user agrees. With nobody signed up, a single line says so.
+ * user agrees. With nobody signed up, a single line says so. `disabled` disables every button
+ * (while someone is signing up).
  */
-export function renderPeopleList(ul, people, { onDelete, onRescan }) {
+export function renderPeopleList(ul, people, { onDelete, onRescan, disabled = false }) {
   if (people.length === 0) {
     const empty = document.createElement('li');
     empty.className = 'people-empty';
@@ -34,6 +35,7 @@ export function renderPeopleList(ul, people, { onDelete, onRescan }) {
       rescan.type = 'button';
       rescan.className = 'button button-secondary';
       rescan.textContent = 'Re-scan shirt';
+      rescan.disabled = disabled;
       rescan.setAttribute('aria-label', `Re-scan shirt for ${person.name}`);
       rescan.addEventListener('click', () => onRescan(person.id));
 
@@ -41,6 +43,7 @@ export function renderPeopleList(ul, people, { onDelete, onRescan }) {
       remove.type = 'button';
       remove.className = 'button button-danger';
       remove.textContent = 'Delete';
+      remove.disabled = disabled;
       remove.setAttribute('aria-label', `Delete ${person.name}`);
       remove.addEventListener('click', () => {
         if (window.confirm(`Delete ${person.name}?`)) onDelete(person.id);

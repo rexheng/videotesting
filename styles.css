@@ -177,6 +177,11 @@ body {
   border-color: var(--danger);
 }
 
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Sign-up panel: one big instruction at a time. */
 #enrol-panel {
   margin-top: var(--gap);

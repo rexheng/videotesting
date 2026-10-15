@@ -89,6 +89,18 @@ async function main() {
   showStatus('');
   if (!store.available) showNotSaved();
 
+  // One sign-up at a time: while the panel is open (from the name form or a re-scan starting
+  // until it hides, including the done message), "Add person" and every People list button are
+  // disabled. Every list render reads this flag.
+  let panelOpen = false;
+  let listedPeople = [];
+
+  function setPanelOpen(open) {
+    panelOpen = open;
+    addPerson.disabled = open;
+    showPeople();
+  }
+
   // The panel's buttons only work once the app exists, which is when "Add person" is enabled.
   const panel = createEnrolPanel(enrolSection, {
     onStart(name) {
@@ -98,17 +110,19 @@ async function main() {
     },
     onCancel: () => app.cancelEnrolment(),
     onHide(hadFocus) {
-      addPerson.disabled = false;
+      setPanelOpen(false);
       if (hadFocus) addPerson.focus();
     },
   });
 
-  function showPeople(people) {
+  function showPeople(people = listedPeople) {
+    listedPeople = people;
     renderPeopleList(peopleList, people, {
+      disabled: panelOpen,
       onRescan(personId) {
         const person = app.getPeople().find((p) => p.id === personId);
         if (!person) return;
-        addPerson.disabled = true;
+        setPanelOpen(true);
         app.startEnrolment(person.name, { personId });
       },
       onDelete(personId) {
@@ -139,8 +153,7 @@ async function main() {
 
   showPeople(app.getPeople());
   addPerson.addEventListener('click', () => {
-    // One sign-up at a time: "Add person" comes back when the panel closes.
-    addPerson.disabled = true;
+    setPanelOpen(true);
     panel.showNameForm();
   });
   addPerson.disabled = false;
