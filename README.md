@@ -90,18 +90,15 @@ npm run build
 npm run deploy
 ```
 
-`npm run build` (`scripts/build.js`, no dependencies) deletes and recreates `dist/` and copies only `index.html`, `shirtcheck.html`, `styles.css`, `shirtcheck.css`, `src/` and `models/` into it. It prints the number of files and the largest one, and fails if any file is over 25 MiB (26,214,400 bytes), which is Cloudflare Pages' limit per file.
+`npm run build` (`scripts/build.js`, no dependencies) deletes and recreates `dist/` and copies only `index.html`, `shirtcheck.html`, `styles.css`, `shirtcheck.css`, `src/` and `models/` into it. It prints the number of files and the largest one, and fails if any file is over 5 MiB (5,242,880 bytes), which is the Workers static-assets limit per file.
 
-### Why the face model is in two parts
+### Why the face model is in parts
 
-The SFace model is 38,696,353 bytes, which is over that limit, so it is stored as two files and the browser joins them (`concatParts` in `src/vision/models.js`). The browser also checks the joined size and its SHA-256 (`0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79`) before using it. The parts were made from the original `face_recognition_sface_2021dec.onnx` (OpenCV Zoo) with:
+The SFace model is 38,696,353 bytes. Cloudflare Pages allows 25 MiB per file and a Workers static-assets upload allows 5 MiB per file, so the model is stored as ten pieces of 4 MiB (the last one shorter). The browser joins them (`concatParts` in `src/vision/models.js`) and checks the joined size and its SHA-256 (`0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79`) before using it. The parts were made from the original `face_recognition_sface_2021dec.onnx` (OpenCV Zoo). To rebuild that file, join them in order:
 
 ```sh
-head -c 20971520  face_recognition_sface_2021dec.onnx > face_recognition_sface_2021dec.onnx.part1   # first 20 MiB
-tail -c +20971521 face_recognition_sface_2021dec.onnx > face_recognition_sface_2021dec.onnx.part2   # the other 17,724,833 bytes
+cat models/face_recognition_sface_2021dec.onnx.part* > face_recognition_sface_2021dec.onnx
 ```
-
-To rebuild the original file, join them in order: `cat face_recognition_sface_2021dec.onnx.part1 face_recognition_sface_2021dec.onnx.part2 > face_recognition_sface_2021dec.onnx`.
 
 ## Testing
 
@@ -110,7 +107,7 @@ npm test         # unit tests (Node, no browser)
 npm run test:e2e # browser tests (Playwright, headless Chromium, with a fake camera)
 ```
 
-- The unit tests cover the pure logic: geometry and head turn, shirt colours, face and shirt matching, tracking, the sign-up steps and storage. They also check that the two SFace parts join into the verified model and that `npm run build` produces a deployable `dist/`.
+- The unit tests cover the pure logic: geometry and head turn, shirt colours, face and shirt matching, tracking, the sign-up steps and storage. They also check that the SFace parts join into the verified model and that `npm run build` produces a deployable `dist/`.
 - The browser tests replace the webcam with a canvas that shows photos from `tests/fixtures/faces/` (see `CREDITS.md` there). They load the real models, so they need internet access. They check camera errors, live tagging, sign-up, the People list and blocked storage. `tests/e2e/pipeline.spec.js` drives the per-frame pipeline and a full sign-up with stand-in models.
 - `scripts/reference_embeddings.py` computes OpenCV's own face embeddings for the fixtures. The browser tests check that ours agree with them.
 

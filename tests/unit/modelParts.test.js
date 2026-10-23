@@ -9,7 +9,7 @@ import {
   concatParts,
 } from '../../src/vision/models.js';
 
-const MAX_FILE_BYTES = 25 * 1024 * 1024; // Cloudflare Pages limit per file.
+const MAX_FILE_BYTES = 5 * 1024 * 1024; // Workers static-assets limit per file. Pages allows 25 MiB.
 const appRoot = new URL('../../', import.meta.url);
 
 test('concatParts joins the buffers in order', () => {
@@ -22,8 +22,8 @@ test('concatParts of an empty list is empty', () => {
   assert.equal(concatParts([]).length, 0);
 });
 
-test('the SFace parts are two files, each within the Cloudflare Pages file limit', async () => {
-  assert.equal(SFACE_MODEL_PARTS.length, 2);
+test('each SFace part is within the Workers static-assets file limit', async () => {
+  assert.ok(SFACE_MODEL_PARTS.length >= 2);
   for (const part of SFACE_MODEL_PARTS) {
     const { size } = await stat(new URL(part, appRoot));
     assert.ok(size > 0 && size <= MAX_FILE_BYTES, `${part} is ${size} bytes`);

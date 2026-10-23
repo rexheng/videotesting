@@ -2,13 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { SFACE_MODEL_PARTS } from '../../src/vision/models.js';
 import { readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const dist = path.join(root, 'dist');
-const MAX_FILE_BYTES = 26_214_400; // 25 MiB, Cloudflare Pages' limit per file.
+const MAX_FILE_BYTES = 5 * 1024 * 1024; // Workers static-assets limit per file.
 
 async function filesUnder(dir) {
   const found = [];
@@ -33,9 +34,8 @@ test('npm run build copies only the site into dist/, every file within the size 
     'shirtcheck.css',
     'styles.css',
     'src/main.js',
-    'models/face_recognition_sface_2021dec.onnx.part1',
-    'models/face_recognition_sface_2021dec.onnx.part2',
     'models/LICENSE-sface.txt',
+    ...SFACE_MODEL_PARTS,
   ]) {
     assert.ok(existsSync(path.join(dist, expected)), `dist/${expected} should exist`);
   }

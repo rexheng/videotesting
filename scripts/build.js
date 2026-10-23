@@ -1,13 +1,14 @@
 // Dependency-free static build for Cloudflare Pages. Usage: node scripts/build.js  (npm run build)
-// Copies only the files the site needs into dist/, and fails if any of them is over Cloudflare Pages'
-// 25 MiB per-file limit.
+// Copies only the files the site needs into dist/, and fails if any of them is over the 5 MiB
+// Workers static-assets limit.
 import { cp, mkdir, readdir, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dist = path.join(root, 'dist');
-const MAX_FILE_BYTES = 25 * 1024 * 1024;
+// Workers static assets allow 5 MiB per file. Pages allows 25 MiB, so this smaller cap covers both.
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
 // Everything else (tests/, docs/, scripts/, node_modules/, .superpowers/ ...) stays out of dist/.
 const SITE_PATHS = ['index.html', 'shirtcheck.html', 'styles.css', 'shirtcheck.css', 'src', 'models'];
@@ -36,7 +37,7 @@ for (const file of await filesUnder(dist)) {
 const tooBig = sizes.filter(({ size }) => size > MAX_FILE_BYTES);
 if (tooBig.length > 0) {
   for (const { name, size } of tooBig) {
-    console.error(`dist/${name} is ${size} bytes, over the Cloudflare Pages limit of ${MAX_FILE_BYTES} bytes (25 MiB).`);
+    console.error(`dist/${name} is ${size} bytes, over the 5 MiB static-asset limit (${MAX_FILE_BYTES} bytes).`);
   }
   console.error('Build failed: split large files into parts (see "Deploy to Cloudflare Pages" in README.md).');
   process.exit(1);
