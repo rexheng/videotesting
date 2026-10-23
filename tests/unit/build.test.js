@@ -29,6 +29,8 @@ test('npm run build copies only the site into dist/, every file within the size 
 
   for (const expected of [
     'index.html',
+    'shirtcheck.html',
+    'shirtcheck.css',
     'styles.css',
     'src/main.js',
     'models/face_recognition_sface_2021dec.onnx.part1',

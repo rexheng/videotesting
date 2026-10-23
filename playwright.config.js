@@ -13,6 +13,8 @@ export default defineConfig({
     browserName: 'chromium',
     headless: true,
     launchOptions: {
+      // CHROME_BIN lets a machine without Playwright's own browser use a local Chrome.
+      ...(process.env.CHROME_BIN ? { executablePath: process.env.CHROME_BIN } : {}),
       args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
     },
   },

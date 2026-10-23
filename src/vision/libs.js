@@ -4,6 +4,7 @@
 export {
   FaceLandmarker,
   PoseLandmarker,
+  ImageSegmenter,
   FilesetResolver,
 } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/vision_bundle.mjs';
 import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/ort.wasm.min.mjs';

@@ -2,6 +2,8 @@
 
 A small web app that uses your live webcam, entirely in the browser, to sign people up by their face and the colour of their shirt, and then tag them live as they appear on camera. Face is the main way it recognises someone. The shirt is the backup for when the face is hidden, for example when the person turns away. There is no bundler: the browser runs the source files as they are.
 
+Shirt Check (`shirtcheck.html`, or **Play Shirt Check** on the tagger page) is a separate game on the same camera. It finds your face, tells you to take the shirt off, and then says whether the chest reads as skin or as cloth. It does not recognise who you are.
+
 ## How to use it
 
 Open the page and allow the camera. The page says `Loading face models…` for a few seconds. **Add person** works once that message has gone.
@@ -37,6 +39,20 @@ Each person shows their name, a circle in their shirt colour, and two buttons:
 
 Each person has their own label colour. Unknown faces are grey.
 
+### Shirt Check
+
+Open `shirtcheck.html` and press **Start**. Allow the camera.
+
+1. **Look straight at the camera.** A bar fills while your face stays in view.
+2. **Take the shirt off.** A meter slides from **Cloth** towards **Skin** as the chest changes. Shoulders need to be in frame.
+3. Hold still once it reads as skin. After about a second it stamps **OFF** and says `Shirt off. Confirmed.`
+4. **Check me** calls it early from the last few readings. If the shirt is still on, the stamp is **ON** and the line is `Still wearing it.`
+5. The round lasts 25 seconds. **Quit** gives up. **Try again** starts over.
+
+`Step back so your shoulders are in view` means the torso is not readable. `Where did you go?` means the face left the frame. `Not enough yet` is the in-between case (a vest, an open shirt). Skin-coloured clothes can fool it, because it is comparing skin pixels with cloth pixels, not understanding fashion.
+
+Nothing from this game is saved. **Quit** or closing the page drops the round.
+
 ## Privacy
 
 - Nothing is uploaded. The camera video, any pictures and all face data stay on this device.
@@ -67,7 +83,7 @@ The app is a static site, so it deploys to Cloudflare Pages straight from GitHub
 
 Every pushed branch gets its own preview URL, and the production URL updates when `main` changes. Pages serves everything over HTTPS, which the camera needs.
 
-`npm run build` (`scripts/build.js`, no dependencies) deletes and recreates `dist/` and copies only `index.html`, `styles.css`, `src/` and `models/` into it. It prints the number of files and the largest one, and fails if any file is over 25 MiB (26,214,400 bytes), which is Cloudflare Pages' limit per file.
+`npm run build` (`scripts/build.js`, no dependencies) deletes and recreates `dist/` and copies only `index.html`, `shirtcheck.html`, `styles.css`, `shirtcheck.css`, `src/` and `models/` into it. It prints the number of files and the largest one, and fails if any file is over 25 MiB (26,214,400 bytes), which is Cloudflare Pages' limit per file.
 
 ### Why the face model is in two parts
 
@@ -96,6 +112,7 @@ npm run test:e2e # browser tests (Playwright, headless Chromium, with a fake cam
 - **Similar shirts**: the shirt backup only compares colours. Two people in similar colours (or both in dark suits) cannot be told apart by shirt, so the app leaves them unnamed rather than guess.
 - **Lighting**: dim light or strong light from behind makes faces harder to find and changes how shirt colours look. The app slowly adjusts each person's shirt colour while it can see their face, but this is not saved.
 - **A new shirt needs Re-scan shirt**: the saved shirt is the one from sign-up. After a change of clothes, use **Re-scan shirt**. The face still works without it.
+- **Shirt Check can be fooled by skin-coloured cloth**, heavy tattoos, jewellery, or hair and a jacket over the chest. It only looks at the torso between the shoulders and the waist. A plain bare chest and a suit separate cleanly. The skin-or-cloth model runs on the CPU so its labels stay in the right order.
 - Up to 4 people are tagged at once, and each person has one shirt. Only the front of the shirt is scanned.
 - Speed depends on the device. Older phones may manage only a few frames a second.
 

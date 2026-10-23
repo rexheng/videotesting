@@ -10,7 +10,7 @@ const dist = path.join(root, 'dist');
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 
 // Everything else (tests/, docs/, scripts/, node_modules/, .superpowers/ ...) stays out of dist/.
-const SITE_PATHS = ['index.html', 'styles.css', 'src', 'models'];
+const SITE_PATHS = ['index.html', 'shirtcheck.html', 'styles.css', 'shirtcheck.css', 'src', 'models'];
 
 async function filesUnder(dir) {
   const found = [];
