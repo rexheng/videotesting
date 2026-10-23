@@ -83,6 +83,13 @@ The app is a static site, so it deploys to Cloudflare Pages straight from GitHub
 
 Every pushed branch gets its own preview URL, and the production URL updates when `main` changes. Pages serves everything over HTTPS, which the camera needs.
 
+The same build also deploys as a Worker with static assets. `wrangler.jsonc` points Wrangler at `dist/`. After `npx wrangler login`:
+
+```sh
+npm run build
+npm run deploy
+```
+
 `npm run build` (`scripts/build.js`, no dependencies) deletes and recreates `dist/` and copies only `index.html`, `shirtcheck.html`, `styles.css`, `shirtcheck.css`, `src/` and `models/` into it. It prints the number of files and the largest one, and fails if any file is over 25 MiB (26,214,400 bytes), which is Cloudflare Pages' limit per file.
 
 ### Why the face model is in two parts
