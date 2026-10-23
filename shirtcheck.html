@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#070708" />
+    <title>Shirt Check</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;display=swap"
+    />
+    <link rel="stylesheet" href="shirtcheck.css" />
+  </head>
+  <body>
+    <header class="top">
+      <p class="brand">Shirt Check</p>
+      <a href="index.html">Face tagger</a>
+    </header>
+
+    <main id="stage">
+      <video id="camera" playsinline muted autoplay></video>
+      <canvas id="overlay"></canvas>
+      <section id="hud">
+        <div class="copy">
+          <p id="stamp" hidden></p>
+          <h1 id="prompt"></h1>
+          <p id="tip"></p>
+          <div id="face-lock" hidden><div id="face-lock-fill"></div></div>
+        </div>
+        <div class="instrument">
+          <p id="clock"></p>
+          <div
+            id="meter"
+            hidden
+            role="meter"
+            aria-label="Skin versus cloth"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+          >
+            <div class="meter-row">
+              <span class="meter-label">Cloth</span>
+              <span id="readout"></span>
+              <span class="meter-label">Skin</span>
+            </div>
+            <div class="track"><div id="meter-fill"></div></div>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="primary" type="button">Start</button>
+          <button id="secondary" type="button" hidden>Quit</button>
+        </div>
+      </section>
+    </main>
+
+    <p id="status" role="status"></p>
+    <script type="module" src="src/shirtcheck/main.js"></script>
+  </body>
+</html>

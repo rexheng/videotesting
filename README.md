@@ -2,6 +2,8 @@
 
 A small web app that uses your live webcam, entirely in the browser, to sign people up by their face and the colour of their shirt, and then tag them live as they appear on camera. Face is the main way it recognises someone. The shirt is the backup for when the face is hidden, for example when the person turns away. There is no bundler: the browser runs the source files as they are.
 
+Shirt Check (`shirtcheck.html`, or **Play Shirt Check** on the tagger page) is a separate game on the same camera. It finds your face, tells you to take the shirt off, and then says whether the chest reads as skin or as cloth. It does not recognise who you are.
+
 ## How to use it
 
 Open the page and allow the camera. The page says `Loading face models…` for a few seconds. **Add person** works once that message has gone.
@@ -37,6 +39,20 @@ Each person shows their name, a circle in their shirt colour, and two buttons:
 
 Each person has their own label colour. Unknown faces are grey.
 
+### Shirt Check
+
+Open `shirtcheck.html` and press **Start**. Allow the camera.
+
+1. **Look straight at the camera.** A bar fills while your face stays in view.
+2. **Take the shirt off.** A meter slides from **Cloth** towards **Skin** as the chest changes. Shoulders need to be in frame.
+3. Hold still once it reads as skin. After about a second it stamps **OFF** and says `Shirt off. Confirmed.`
+4. **Check me** calls it early from the last few readings. If the shirt is still on, the stamp is **ON** and the line is `Still wearing it.`
+5. The round lasts 25 seconds. **Quit** gives up. **Try again** starts over.
+
+`Step back so your shoulders are in view` means the torso is not readable. `Where did you go?` means the face left the frame. `Not enough yet` is the in-between case (a vest, an open shirt). Skin-coloured clothes can fool it, because it is comparing skin pixels with cloth pixels, not understanding fashion.
+
+Nothing from this game is saved. **Quit** or closing the page drops the round.
+
 ## Privacy
 
 - Nothing is uploaded. The camera video, any pictures and all face data stay on this device.
@@ -67,18 +83,22 @@ The app is a static site, so it deploys to Cloudflare Pages straight from GitHub
 
 Every pushed branch gets its own preview URL, and the production URL updates when `main` changes. Pages serves everything over HTTPS, which the camera needs.
 
-`npm run build` (`scripts/build.js`, no dependencies) deletes and recreates `dist/` and copies only `index.html`, `styles.css`, `src/` and `models/` into it. It prints the number of files and the largest one, and fails if any file is over 25 MiB (26,214,400 bytes), which is Cloudflare Pages' limit per file.
-
-### Why the face model is in two parts
-
-The SFace model is 38,696,353 bytes, which is over that limit, so it is stored as two files and the browser joins them (`concatParts` in `src/vision/models.js`). The browser also checks the joined size and its SHA-256 (`0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79`) before using it. The parts were made from the original `face_recognition_sface_2021dec.onnx` (OpenCV Zoo) with:
+The same build also deploys as a Worker with static assets. `wrangler.jsonc` points Wrangler at `dist/`. After `npx wrangler login`:
 
 ```sh
-head -c 20971520  face_recognition_sface_2021dec.onnx > face_recognition_sface_2021dec.onnx.part1   # first 20 MiB
-tail -c +20971521 face_recognition_sface_2021dec.onnx > face_recognition_sface_2021dec.onnx.part2   # the other 17,724,833 bytes
+npm run build
+npm run deploy
 ```
 
-To rebuild the original file, join them in order: `cat face_recognition_sface_2021dec.onnx.part1 face_recognition_sface_2021dec.onnx.part2 > face_recognition_sface_2021dec.onnx`.
+`npm run build` (`scripts/build.js`, no dependencies) deletes and recreates `dist/` and copies only `index.html`, `shirtcheck.html`, `styles.css`, `shirtcheck.css`, `src/` and `models/` into it. It prints the number of files and the largest one, and fails if any file is over 5 MiB (5,242,880 bytes), which is the Workers static-assets limit per file.
+
+### Why the face model is in parts
+
+The SFace model is 38,696,353 bytes. Cloudflare Pages allows 25 MiB per file and a Workers static-assets upload allows 5 MiB per file, so the model is stored as ten pieces of 4 MiB (the last one shorter). The browser joins them (`concatParts` in `src/vision/models.js`) and checks the joined size and its SHA-256 (`0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79`) before using it. The parts were made from the original `face_recognition_sface_2021dec.onnx` (OpenCV Zoo). To rebuild that file, join them in order:
+
+```sh
+cat models/face_recognition_sface_2021dec.onnx.part* > face_recognition_sface_2021dec.onnx
+```
 
 ## Testing
 
@@ -87,7 +107,7 @@ npm test         # unit tests (Node, no browser)
 npm run test:e2e # browser tests (Playwright, headless Chromium, with a fake camera)
 ```
 
-- The unit tests cover the pure logic: geometry and head turn, shirt colours, face and shirt matching, tracking, the sign-up steps and storage. They also check that the two SFace parts join into the verified model and that `npm run build` produces a deployable `dist/`.
+- The unit tests cover the pure logic: geometry and head turn, shirt colours, face and shirt matching, tracking, the sign-up steps and storage. They also check that the SFace parts join into the verified model and that `npm run build` produces a deployable `dist/`.
 - The browser tests replace the webcam with a canvas that shows photos from `tests/fixtures/faces/` (see `CREDITS.md` there). They load the real models, so they need internet access. They check camera errors, live tagging, sign-up, the People list and blocked storage. `tests/e2e/pipeline.spec.js` drives the per-frame pipeline and a full sign-up with stand-in models.
 - `scripts/reference_embeddings.py` computes OpenCV's own face embeddings for the fixtures. The browser tests check that ours agree with them.
 
@@ -96,6 +116,7 @@ npm run test:e2e # browser tests (Playwright, headless Chromium, with a fake cam
 - **Similar shirts**: the shirt backup only compares colours. Two people in similar colours (or both in dark suits) cannot be told apart by shirt, so the app leaves them unnamed rather than guess.
 - **Lighting**: dim light or strong light from behind makes faces harder to find and changes how shirt colours look. The app slowly adjusts each person's shirt colour while it can see their face, but this is not saved.
 - **A new shirt needs Re-scan shirt**: the saved shirt is the one from sign-up. After a change of clothes, use **Re-scan shirt**. The face still works without it.
+- **Shirt Check can be fooled by skin-coloured cloth**, heavy tattoos, jewellery, or hair and a jacket over the chest. It only looks at the torso between the shoulders and the waist. A plain bare chest and a suit separate cleanly. The skin-or-cloth model runs on the CPU so its labels stay in the right order.
 - Up to 4 people are tagged at once, and each person has one shirt. Only the front of the shirt is scanned.
 - Speed depends on the device. Older phones may manage only a few frames a second.
 

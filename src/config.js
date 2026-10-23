@@ -42,6 +42,18 @@ export const MIN_TORSO_PX = 40;
 export const TORSO_SHRINK = 0.15;
 export const MAX_SHIRT_SAMPLES = 2000;
 
+// Shirt Check: skin versus cloth inside the torso (selfie multiclass categories).
+// Shirtless when skin is at least this share of (skin + cloth); still dressed at or below the other.
+export const SHIRTCHECK_SHIRTLESS_AT = 0.6;
+export const SHIRTCHECK_DRESSED_AT = 0.4;
+export const SHIRTCHECK_MIN_SAMPLES = 40;
+export const SHIRTCHECK_MIN_FACE = 0.08; // normalised box width and height
+export const SHIRTCHECK_FACE_HOLD_MS = 800;
+export const SHIRTCHECK_DARE_MS = 25000;
+export const SHIRTCHECK_HOLD_MS = 1000;
+export const SHIRTCHECK_FACE_GRACE_MS = 700;
+export const SHIRTCHECK_SAMPLE_GAP_MS = 150;
+
 // Persistence and UI.
 export const STORAGE_KEY = 'videotesting.people.v1';
 export const NAME_MAX = 30;

@@ -53,6 +53,16 @@ body {
   line-height: 1.2;
 }
 
+.page-nav {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+}
+
+.page-nav a {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 #status {
   margin: 0 0 var(--gap);
   overflow-wrap: anywhere;

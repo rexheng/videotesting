@@ -1,0 +1,660 @@
+:root {
+  color-scheme: dark;
+  --bg: #070708;
+  --fg: #f7f7f6;
+  --muted: rgba(247, 247, 246, 0.72);
+  --line: rgba(247, 247, 246, 0.28);
+  --track: rgba(247, 247, 246, 0.16);
+  --accent: #ff4b3a;
+  --ink: #070708;
+  --plate: rgba(7, 7, 8, 0.92);
+  --side: max(20px, env(safe-area-inset-left));
+  --side-end: max(20px, env(safe-area-inset-right));
+  --font: Inter, Helvetica, Arial, sans-serif;
+  --thumb: 18px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  background: var(--bg);
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body {
+  color: var(--fg);
+  font-family: var(--font);
+  font-weight: 400;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.top {
+  position: fixed;
+  z-index: 4;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: max(12px, env(safe-area-inset-top)) var(--side-end) 28px var(--side);
+  /* Hold a dark scrim through the brand and the back link, then clear by 72px plus the safe area. */
+  background: linear-gradient(
+    to bottom,
+    rgba(7, 7, 8, 0.9) 0,
+    rgba(7, 7, 8, 0.9) calc(env(safe-area-inset-top, 0px) + 56px),
+    rgba(7, 7, 8, 0) calc(env(safe-area-inset-top, 0px) + 72px)
+  );
+  pointer-events: none;
+}
+
+.brand {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.top a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 2px;
+  color: var(--fg);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  pointer-events: auto;
+}
+
+.top a:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  overflow: hidden;
+}
+
+#camera,
+#overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  object-fit: cover;
+}
+
+#camera {
+  background: #000;
+  transform: scaleX(-1);
+}
+
+#overlay {
+  z-index: 1;
+  pointer-events: none;
+  /* Solid over the camera until 230px from the bottom, then transparent by 170px from the bottom, so the hairline clears the plate and does not draw through the type. */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #fff 0,
+    #fff calc(100% - 230px),
+    transparent calc(100% - 170px)
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    #fff 0,
+    #fff calc(100% - 230px),
+    transparent calc(100% - 170px)
+  );
+}
+
+#hud {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-start;
+  max-width: 100%;
+  padding: 18px var(--side-end) max(16px, env(safe-area-inset-bottom)) var(--side);
+  background: linear-gradient(
+    to top,
+    var(--plate) 0%,
+    var(--plate) calc(100% - 16px),
+    rgba(7, 7, 8, 0) 100%
+  );
+}
+
+.copy,
+.instrument,
+.actions {
+  width: min(100%, 28rem);
+  max-width: 100%;
+  min-width: 0;
+}
+
+#stamp {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+#stamp[data-kind="shirtless"],
+body[data-reading="shirtless"] #stamp {
+  color: var(--accent);
+}
+
+#stamp[data-kind="dressed"],
+body[data-reading="dressed"] #stamp {
+  color: var(--fg);
+}
+
+#prompt {
+  margin: 0;
+  max-width: min(20ch, 100%);
+  min-width: 0;
+  font-size: clamp(1.75rem, 2.4vw, 2.25rem);
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+  overflow-wrap: break-word;
+}
+
+#tip {
+  margin: 8px 0 0;
+  max-width: 36ch;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+}
+
+#tip:empty,
+#clock:empty {
+  display: none;
+}
+
+/* Face hold is a short segmented lock, not the cloth/skin meter. */
+#face-lock {
+  position: relative;
+  width: 4.25rem;
+  height: 8px;
+  margin-top: 10px;
+  background: rgba(247, 247, 246, 0.16);
+  overflow: hidden;
+}
+
+#face-lock::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(#070708, #070708) left 33.33% center / 2px 100% no-repeat,
+    linear-gradient(#070708, #070708) left 66.66% center / 2px 100% no-repeat;
+  pointer-events: none;
+}
+
+#face-lock-fill {
+  width: 0;
+  height: 100%;
+  background: var(--fg);
+}
+
+.instrument {
+  position: relative;
+  margin-top: 14px;
+}
+
+/* Hidden meter and an empty clock should not open a gap above the buttons. */
+.instrument:has(#meter[hidden]):not(:has(#clock:not(:empty))) {
+  margin-top: 0;
+}
+
+#clock {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  text-align: right;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
+#meter {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  min-width: 0;
+}
+
+.meter-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.meter-label,
+#readout {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
+.meter-label {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+#readout {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg);
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-overflow: ellipsis;
+}
+
+.track {
+  position: relative;
+  height: 12px;
+  margin: 8px 12px 0;
+  background: var(--track);
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(247, 247, 246, 0.2);
+}
+
+#meter-fill {
+  position: relative;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--fg);
+}
+
+/* Neutral ring in every state. Fill color comes from the reading, not the thumb. */
+#meter-fill::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: var(--thumb);
+  height: var(--thumb);
+  box-sizing: border-box;
+  border: 2px solid rgba(247, 247, 246, 0.78);
+  border-radius: 50%;
+  background: #070708;
+  transform: translate(50%, -50%);
+}
+
+#meter[data-kind="shirtless"] #meter-fill,
+#meter[data-kind="close"] #meter-fill,
+body[data-reading="shirtless"] #meter-fill,
+body[data-reading="close"] #meter-fill {
+  background: var(--accent);
+}
+
+#meter[data-kind="dressed"] #meter-fill,
+body[data-reading="dressed"] #meter-fill {
+  background: var(--fg);
+}
+
+#meter[data-kind="unclear"] #meter-fill,
+body[data-reading="unclear"] #meter-fill {
+  background: rgba(247, 247, 246, 0.4);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  margin-top: 14px;
+  flex-shrink: 0;
+}
+
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 48px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  background: var(--accent);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.actions button {
+  flex: 1 1 0;
+  max-width: 100%;
+}
+
+#primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 86%, white);
+}
+
+#primary:active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 78%, black);
+}
+
+#secondary,
+#retry {
+  color: var(--fg);
+  background: #121214;
+  border-color: rgba(247, 247, 246, 0.42);
+}
+
+#secondary:hover:not(:disabled),
+#retry:hover {
+  border-color: var(--fg);
+}
+
+button:disabled {
+  color: rgba(247, 247, 246, 0.4);
+  background: rgba(247, 247, 246, 0.1);
+  border-color: transparent;
+  cursor: not-allowed;
+}
+
+button:focus-visible,
+.top a:focus-visible {
+  outline: 2px solid var(--fg);
+  outline-offset: 3px;
+}
+
+#status {
+  position: fixed;
+  z-index: 5;
+  top: calc(env(safe-area-inset-top, 0px) + 64px);
+  left: var(--side);
+  right: var(--side-end);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+#status:empty {
+  display: none;
+}
+
+#status:not(:empty) {
+  padding: 12px 14px;
+  border: 1px solid rgba(247, 247, 246, 0.16);
+  border-left: 2px solid var(--accent);
+  background: #101012;
+  color: var(--fg);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+#retry {
+  margin: 8px 0 0;
+  vertical-align: middle;
+}
+
+/* Phase layout. Missing attributes keep the bottom stack above, which stays readable. */
+
+body[data-phase="idle"] #prompt {
+  max-width: min(22ch, 100%);
+}
+
+body[data-phase="face"] #face-lock,
+body[data-phase="face"] #face-lock-fill {
+  border-radius: 0;
+}
+
+body[data-phase="face"] #face-lock-fill {
+  background: var(--accent);
+}
+
+/* Dare and face: the plate is only as tall as its content. The prompt and tip wrap; nothing is clipped. */
+body[data-phase="dare"] #hud,
+body[data-phase="face"] #hud {
+  padding-top: 12px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  background: linear-gradient(
+    to top,
+    var(--plate) 0%,
+    var(--plate) calc(100% - 12px),
+    rgba(7, 7, 8, 0) 100%
+  );
+}
+
+body[data-phase="dare"] #prompt,
+body[data-phase="face"] #prompt {
+  max-width: 100%;
+  font-size: 1.4rem;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.022em;
+  /* Wrap only when the line does not fit. Balance would break a full line early and grow the plate. */
+  text-wrap: wrap;
+}
+
+body[data-phase="dare"] #tip,
+body[data-phase="face"] #tip {
+  margin-top: 3px;
+  max-width: 100%;
+  font-size: 0.8125rem;
+  line-height: 1.3;
+}
+
+body[data-phase="dare"] .instrument {
+  margin-top: 6px;
+}
+
+/* Readout repeats CLOTH / SKIN. Keep the node, give it no box. */
+body[data-phase="dare"] #readout {
+  display: none;
+}
+
+/* Sentence case is set in JS. A quiet line, not a third meter label. */
+body[data-phase="dare"] #clock {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  text-align: left;
+  text-transform: none;
+}
+
+/* Dare meter row is CLOTH, the track, SKIN. Nothing else. */
+body[data-phase="dare"] #meter {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 16px;
+}
+
+body[data-phase="dare"] .meter-row {
+  display: contents;
+}
+
+body[data-phase="dare"] .meter-label:first-child {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+body[data-phase="dare"] .meter-label:last-child {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+body[data-phase="dare"] .track {
+  grid-column: 2;
+  grid-row: 1;
+  margin: 0;
+}
+
+body[data-phase="face"] .actions {
+  margin-top: 8px;
+}
+
+body[data-phase="dare"] .actions {
+  /* The 18px thumb hangs 3px past the 12px track. 20px leaves 17px clear of the button. */
+  margin-top: 20px;
+}
+
+body[data-phase="verdict"] #hud {
+  padding-top: 12px;
+}
+
+body[data-phase="verdict"] #stamp {
+  margin-bottom: 4px;
+}
+
+body[data-phase="verdict"] #prompt {
+  max-width: min(16ch, 100%);
+  font-size: clamp(1.625rem, 2.2vw, 2rem);
+  line-height: 1.12;
+}
+
+body[data-phase="verdict"] #tip {
+  margin-top: 4px;
+}
+
+body[data-phase="verdict"] .instrument:has(#meter:not([hidden])) {
+  margin-top: 8px;
+}
+
+body[data-phase="verdict"] .actions {
+  /* The 18px thumb hangs 3px past the 12px track. 20px keeps that overhang off the button. */
+  margin-top: 20px;
+}
+
+@media (min-width: 900px) {
+  :root {
+    --side: max(64px, env(safe-area-inset-left));
+    --side-end: max(64px, env(safe-area-inset-right));
+  }
+}
+
+@media (max-width: 390px) {
+  :root {
+    --side: max(16px, env(safe-area-inset-left));
+    --side-end: max(16px, env(safe-area-inset-right));
+  }
+}
+
+@media (max-height: 700px) {
+  #hud {
+    padding-top: 12px;
+  }
+
+  body[data-phase="dare"] #hud,
+  body[data-phase="face"] #hud {
+    padding-top: 8px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    background: linear-gradient(
+      to top,
+      var(--plate) 0%,
+      var(--plate) calc(100% - 8px),
+      rgba(7, 7, 8, 0) 100%
+    );
+  }
+
+  #prompt,
+  body[data-phase="idle"] #prompt,
+  body[data-phase="verdict"] #prompt {
+    font-size: 1.5rem;
+  }
+
+  body[data-phase="dare"] #prompt,
+  body[data-phase="face"] #prompt {
+    font-size: 1.35rem;
+  }
+
+  #tip {
+    margin-top: 4px;
+  }
+
+  .instrument,
+  body[data-phase="verdict"] .instrument:has(#meter:not([hidden])) {
+    margin-top: 8px;
+  }
+
+  .actions,
+  body[data-phase="face"] .actions {
+    margin-top: 8px;
+  }
+
+  body[data-phase="dare"] .actions {
+    margin-top: 20px;
+  }
+
+  button {
+    min-height: 44px;
+  }
+}
+
+/* Below ~354px the longest dare lines would wrap and push the plate into the middle of a 640px-tall frame. */
+@media (max-height: 700px) and (max-width: 354px) {
+  body[data-phase="dare"] #prompt {
+    font-size: 1.2rem;
+  }
+
+  body[data-phase="dare"] #tip {
+    font-size: 0.6875rem;
+  }
+}
+
+@media (max-height: 520px) {
+  #status:not(:empty) {
+    max-height: 28vh;
+    overflow: auto;
+  }
+}

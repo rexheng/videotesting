@@ -108,7 +108,7 @@ function binOf(r, g, b) {
 }
 
 /** True when [px, py] is inside or on the edge of the convex quad, whichever way it is wound. */
-function insideConvexQuad(quad, px, py) {
+export function insideConvexQuad(quad, px, py) {
   let sawPositive = false;
   let sawNegative = false;
   for (let i = 0; i < quad.length; i++) {

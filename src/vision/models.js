@@ -2,12 +2,21 @@
 import { MAX_FACES, MAX_POSES } from '../config.js';
 
 /**
- * SFace face-recognition model, stored as two parts (relative to the app root) because Cloudflare Pages
- * allows only 25 MiB per file and the model is 38.7 MB. The browser downloads both and joins them.
+ * SFace face-recognition model, stored as 4 MiB parts (relative to the app root). The whole file is
+ * 38.7 MB. Cloudflare Pages allows 25 MiB per file, and a Workers static-assets upload allows 5 MiB
+ * per file, so neither limit can hold it in one piece. The browser downloads every part and joins them.
  */
 export const SFACE_MODEL_PARTS = Object.freeze([
-  'models/face_recognition_sface_2021dec.onnx.part1',
-  'models/face_recognition_sface_2021dec.onnx.part2',
+  'models/face_recognition_sface_2021dec.onnx.part01',
+  'models/face_recognition_sface_2021dec.onnx.part02',
+  'models/face_recognition_sface_2021dec.onnx.part03',
+  'models/face_recognition_sface_2021dec.onnx.part04',
+  'models/face_recognition_sface_2021dec.onnx.part05',
+  'models/face_recognition_sface_2021dec.onnx.part06',
+  'models/face_recognition_sface_2021dec.onnx.part07',
+  'models/face_recognition_sface_2021dec.onnx.part08',
+  'models/face_recognition_sface_2021dec.onnx.part09',
+  'models/face_recognition_sface_2021dec.onnx.part10',
 ]);
 /** Size and SHA-256 of the joined model, checked after download so a bad or half-cached part is caught. */
 export const SFACE_MODEL_BYTES = 38696353;
