@@ -4,15 +4,17 @@ import { installFakeCamera, denyCamera } from './helpers/fakeCamera.js';
 test('a held shirtless reading is confirmed', async ({ page }) => {
   await installFakeCamera(page);
   await page.goto('/shirtcheck.html?scripted=1');
-  await expect(page.locator('#prompt')).toHaveText('Show your face. Then take the shirt off.');
+  await expect(page.locator('#prompt')).toHaveText('Look at me. Then lose the shirt.');
 
   await page.locator('#primary').click();
-  await expect(page.locator('#prompt')).toHaveText('Look straight at the camera.');
+  await expect(page.locator('#prompt')).toHaveText('Look at the camera.');
+  await expect(page.locator('#primary')).toHaveText('Wait');
 
   await page.evaluate(() => {
     window.__shirtFrame = { face: true, reading: null };
   });
-  await expect(page.locator('#prompt')).toHaveText('Take the shirt off.', { timeout: 5000 });
+  await expect(page.locator('#prompt')).toHaveText('Shirt off.', { timeout: 5000 });
+  await expect(page.locator('#primary')).toHaveText('Call it');
 
   await page.evaluate(() => {
     window.__shirtFrame = {
@@ -20,7 +22,7 @@ test('a held shirtless reading is confirmed', async ({ page }) => {
       reading: { verdict: 'dressed', skinRatio: 0.12, relevant: 100, sampled: 100 },
     };
   });
-  await expect(page.locator('#prompt')).toHaveText('That is still a shirt.');
+  await expect(page.locator('#prompt')).toHaveText('Take it off.');
 
   await page.evaluate(() => {
     window.__shirtFrame = {
@@ -35,9 +37,9 @@ test('a held shirtless reading is confirmed', async ({ page }) => {
       reading: { verdict: 'shirtless', skinRatio: 0.86, relevant: 200, sampled: 200 },
     };
   });
-  await expect(page.locator('#prompt')).toHaveText('Shirt off. Confirmed.', { timeout: 5000 });
+  await expect(page.locator('#prompt')).toHaveText("Shirt's off.", { timeout: 5000 });
   await expect(page.locator('#stamp')).toHaveText('OFF');
-  await expect(page.locator('#tip')).toContainText('% of the chest reads as skin');
+  await expect(page.locator('#tip')).toHaveText('The chest is bare.');
 });
 
 test('Check me calls a shirt that stays on', async ({ page }) => {
@@ -50,10 +52,11 @@ test('Check me calls a shirt that stays on', async ({ page }) => {
       reading: { verdict: 'dressed', skinRatio: 0.1, relevant: 80, sampled: 80 },
     };
   });
-  await expect(page.locator('#prompt')).toHaveText('That is still a shirt.', { timeout: 5000 });
+  await expect(page.locator('#prompt')).toHaveText('Take it off.', { timeout: 5000 });
   await expect(page.locator('#primary')).toBeEnabled({ timeout: 3000 });
+  await expect(page.locator('#primary')).toHaveText('Call it');
   await page.locator('#primary').click();
-  await expect(page.locator('#prompt')).toHaveText('Still wearing it.');
+  await expect(page.locator('#prompt')).toHaveText('Shirt stayed on.');
   await expect(page.locator('#stamp')).toHaveText('ON');
 });
 
@@ -62,7 +65,7 @@ test('a blocked camera is explained', async ({ page }) => {
   await page.goto('/shirtcheck.html?scripted=1');
   await page.locator('#primary').click();
   await expect(page.locator('#status')).toContainText('Camera access was blocked');
-  await expect(page.locator('#prompt')).toHaveText('Show your face. Then take the shirt off.');
+  await expect(page.locator('#prompt')).toHaveText('Look at me. Then lose the shirt.');
 });
 
 test('a bare chest reads as shirtless', async ({ page }) => {

@@ -1,9 +1,10 @@
 // Shirt Check rounds. Pure state machine: the page feeds it "is there a face?" and a torso reading
 // each frame, and this decides the prompt, the meter and when to call the result.
 //
-// A round: look at the camera until the face holds, then "take the shirt off". A shirtless reading
-// that holds still is a win. "Check me" forces a call from the recent readings. The clock calls
-// whatever the recent readings say when time runs out.
+// A round: look at the camera until the face holds, then take the shirt off. A shirtless reading
+// that holds still is a win. Call it forces a call from the recent readings. The clock calls
+// whatever the recent readings say when time runs out. A half-off shirt stays in the dare; a
+// finished call counts it as still dressed.
 
 import { median } from '../vision/geometry.js';
 import { verdictFromRatio } from './bare.js';
@@ -14,13 +15,6 @@ import {
   SHIRTCHECK_FACE_GRACE_MS,
   SHIRTCHECK_SAMPLE_GAP_MS,
 } from '../config.js';
-
-const DRESSED_NAGS = [
-  'That is still a shirt.',
-  'Sleeves and all.',
-  'The shirt is winning.',
-  'The bar should move towards skin.',
-];
 
 function blank() {
   return {
@@ -62,15 +56,26 @@ function finish(state, verdict, skinRatio, reason) {
 }
 
 /**
- * Recent samples that agree enough for the Check me button.
- * At least three samples in the last 1.2s, and their median ratio on one side of the band.
+ * A finished call from a measured ratio.
+ * Shirtless only at the shirtless line. The live close band, and anything more clothed, is
+ * dressed: the shirt was in frame and did not come off. Null or NaN stays unclear.
+ */
+function finalVerdict(ratio) {
+  const verdict = verdictFromRatio(ratio);
+  if (verdict === 'unclear' && ratio != null && !Number.isNaN(ratio)) return 'dressed';
+  return verdict;
+}
+
+/**
+ * Recent samples that agree enough for the Call it button.
+ * At least three samples in the last 1.2s, with a ratio that is not null or NaN.
  * Returns { verdict, skinRatio } or null.
  */
 export function checkDecision(samples, now) {
   const recent = samples.filter((sample) => now - sample.t <= 1200);
   if (recent.length < 3) return null;
   const skinRatio = median(recent.map((sample) => sample.skinRatio));
-  const verdict = verdictFromRatio(skinRatio);
+  const verdict = finalVerdict(skinRatio);
   if (verdict === 'unclear') return null;
   return { verdict, skinRatio };
 }
@@ -136,7 +141,7 @@ export function tickShirtCheck(state, now, obs) {
 
   if (now - next.dareStartedAt >= SHIRTCHECK_DARE_MS) {
     const ratio = next.samples.length ? median(next.samples.map((sample) => sample.skinRatio)) : null;
-    const verdict = next.samples.length >= 3 ? verdictFromRatio(ratio) : 'unclear';
+    const verdict = next.samples.length >= 3 ? finalVerdict(ratio) : 'unclear';
     return finish(next, verdict, ratio, 'timeout');
   }
   return next;
@@ -160,7 +165,7 @@ function percent(ratio) {
 export function shirtCheckView(state, now) {
   if (state.phase === 'idle') {
     return {
-      prompt: 'Show your face. Then take the shirt off.',
+      prompt: 'Look at me. Then lose the shirt.',
       tip: 'Upper body only. The picture stays in this browser and nothing is recorded.',
       primaryLabel: 'Start',
       primaryDisabled: false,
@@ -178,9 +183,9 @@ export function shirtCheckView(state, now) {
   if (state.phase === 'face') {
     const locking = state.faceSince != null;
     return {
-      prompt: locking ? 'Hold still.' : 'Look straight at the camera.',
-      tip: locking ? 'Locking onto your face.' : 'I need a face before the dare.',
-      primaryLabel: 'Locking on',
+      prompt: locking ? 'Hold still.' : 'Look at the camera.',
+      tip: locking ? 'Eyes on the camera.' : "I'll start once I see your face.",
+      primaryLabel: 'Wait',
       primaryDisabled: true,
       showQuit: true,
       showMeter: false,
@@ -197,36 +202,37 @@ export function shirtCheckView(state, now) {
     const here = faceIsCurrent(state, now);
     const reading = state.lastReading;
     const ratio = reading && reading.verdict !== 'unclear' ? reading.skinRatio : 0;
-    let prompt = 'Take the shirt off.';
-    let tip = 'Shoulders in view. I call it when the chest reads as skin.';
+    const decision = checkDecision(state.samples, now);
+    let prompt = 'Shirt off.';
+    let tip = "Shoulders in frame. I'll call it when I see skin.";
     if (!here) {
-      prompt = 'Where did you go?';
-      tip = 'Bring your face back into view.';
+      prompt = 'Come back into frame.';
+      tip = 'Look at the camera.';
     } else if (reading?.verdict === 'unclear') {
-      prompt = 'Step back so your shoulders are in view.';
-      tip = 'I need the chest in frame, not a close-up of your nose.';
+      prompt = 'Step back. Shoulders in frame.';
+      tip = 'I need your chest in frame.';
     } else if (reading?.verdict === 'shirtless') {
-      prompt = 'That looks like skin.';
-      tip = 'Hold still.';
+      prompt = "That's skin. Hold.";
+      tip = 'Stay there.';
     } else if (reading?.verdict === 'close') {
-      prompt = 'Not enough yet.';
-      tip = 'A vest does not count.';
+      prompt = 'Pull it off.';
+      tip = 'Keep pulling until the chest is bare.';
     } else if (reading?.verdict === 'dressed') {
-      const nag = Math.floor((now - state.dareStartedAt) / 3500) % DRESSED_NAGS.length;
-      prompt = DRESSED_NAGS[nag];
-      tip = 'Shoulders in view. The bar moves right as the shirt comes off.';
+      prompt = 'Take it off.';
+      tip = 'Get it off your chest.';
     }
+    // The press ends the round. Name the button once it can be pressed.
+    if (decision && !tip.includes('Call it')) tip = `${tip} Call it.`;
     const remain = Math.max(0, SHIRTCHECK_DARE_MS - (now - state.dareStartedAt));
-    const readable = here && reading && reading.verdict !== 'unclear';
     return {
       prompt,
       tip,
-      primaryLabel: 'Check me',
-      primaryDisabled: !checkDecision(state.samples, now),
+      primaryLabel: 'Call it',
+      primaryDisabled: !decision,
       showQuit: true,
       showMeter: true,
       meter: ratio,
-      readout: readable ? `${percent(ratio)}% skin` : 'No torso',
+      readout: '',
       clock: `${Math.ceil(remain / 1000)}s left`,
       stamp: '',
       stampKind: '',
@@ -238,14 +244,14 @@ export function shirtCheckView(state, now) {
   const pct = percent(result?.skinRatio);
   if (result?.verdict === 'shirtless') {
     return {
-      prompt: 'Shirt off. Confirmed.',
-      tip: pct == null ? '' : `${pct}% of the chest reads as skin.`,
-      primaryLabel: 'Try again',
+      prompt: "Shirt's off.",
+      tip: pct == null ? '' : 'The chest is bare.',
+      primaryLabel: 'Again',
       primaryDisabled: false,
       showQuit: false,
       showMeter: pct != null,
       meter: result.skinRatio ?? 0,
-      readout: pct == null ? '' : `${pct}% skin`,
+      readout: '',
       clock: '',
       stamp: 'OFF',
       stampKind: 'shirtless',
@@ -254,14 +260,14 @@ export function shirtCheckView(state, now) {
   }
   if (result?.verdict === 'dressed') {
     return {
-      prompt: 'Still wearing it.',
-      tip: pct == null ? 'The shirt won.' : `${pct}% skin. The shirt won.`,
-      primaryLabel: 'Try again',
+      prompt: 'Shirt stayed on.',
+      tip: 'I still see a shirt.',
+      primaryLabel: 'Again',
       primaryDisabled: false,
       showQuit: false,
       showMeter: pct != null,
       meter: result.skinRatio ?? 0,
-      readout: pct == null ? '' : `${pct}% skin`,
+      readout: '',
       clock: '',
       stamp: 'ON',
       stampKind: 'dressed',
@@ -269,9 +275,9 @@ export function shirtCheckView(state, now) {
     };
   }
   return {
-    prompt: 'No call.',
-    tip: 'I could not see enough of your chest. Step back and try again.',
-    primaryLabel: 'Try again',
+    prompt: "Couldn't see.",
+    tip: 'Try again.',
+    primaryLabel: 'Again',
     primaryDisabled: false,
     showQuit: false,
     showMeter: false,
