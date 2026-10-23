@@ -67,13 +67,11 @@ function stopStream(stream) {
   });
 }
 
-// Stop the stream this attempt created. A later attempt's stream stays on the video.
+// Stop only the abandoned stream. If it is still the element's srcObject, put the kept
+// stream back and leave the element paused — a discard play() aborts the newer attempt.
 function discardStaleCamera(stream) {
   if (!stream || stream === keptStream) return;
-  if (video.srcObject === stream) {
-    video.srcObject = keptStream;
-    if (keptStream) void video.play?.().catch(() => {});
-  }
+  if (video.srcObject === stream) video.srcObject = keptStream;
   stopStream(stream);
 }
 

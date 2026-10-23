@@ -540,9 +540,13 @@ body[data-phase="dare"] .track {
   margin: 0;
 }
 
-body[data-phase="dare"] .actions,
 body[data-phase="face"] .actions {
   margin-top: 8px;
+}
+
+body[data-phase="dare"] .actions {
+  /* The 18px thumb hangs 3px past the 12px track. 20px leaves 17px clear of the button. */
+  margin-top: 20px;
 }
 
 body[data-phase="verdict"] #hud {
@@ -624,9 +628,12 @@ body[data-phase="verdict"] .actions {
   }
 
   .actions,
-  body[data-phase="dare"] .actions,
   body[data-phase="face"] .actions {
     margin-top: 8px;
+  }
+
+  body[data-phase="dare"] .actions {
+    margin-top: 20px;
   }
 
   button {
