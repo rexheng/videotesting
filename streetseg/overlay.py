@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from .labels import is_light
 from .mapillary import paint_bgr
 from .types import Box, Cue
 
@@ -17,6 +18,7 @@ def draw_overlay(
     boxes: list[Box],
     cue: Cue,
     role: str = "",
+    status: str = "",
 ) -> np.ndarray:
     if bgr.ndim != 3 or bgr.shape[2] != 3:
         raise ValueError("expected a BGR frame")
@@ -33,7 +35,9 @@ def draw_overlay(
     out = np.clip(out, 0, 255).astype(np.uint8)
     for box in boxes:
         _rectangle(out, box)
-    _banner(out, cue, role)
+    _banner(out, cue, role, status)
+    for box in boxes:
+        _light_label(out, box)
     _legend(out, names)
     return out
 
@@ -86,14 +90,18 @@ def _box_color(box: Box) -> tuple[int, int, int]:
     return (255, 220, 0)
 
 
-def _banner(image: np.ndarray, cue: Cue, role: str = "") -> None:
+def _banner(image: np.ndarray, cue: Cue, role: str = "", status: str = "") -> None:
     image[:_BANNER, :] = (18, 18, 22)
     if cue.direction == "stop":
         image[:4, :] = (30, 30, 210)
     _glyph(image, cue.direction)
-    _text(image, cue.speech, x=62, y=40)
+    if status:
+        _text(image, status, 62, 24, scale=0.46, margin=96 if role else 12)
+        _text(image, cue.speech, 62, 50, scale=0.55)
+    else:
+        _text(image, cue.speech, x=62, y=40)
     if role:
-        _text(image, role, max(62, image.shape[1] - 88), 22)
+        _text(image, role, max(62, image.shape[1] - 88), 22, scale=0.45)
 
 
 def _glyph(image: np.ndarray, direction: str) -> None:
@@ -157,17 +165,71 @@ def _legend(image: np.ndarray, names: dict[int, str] | None = None) -> None:
         x += 22 + tw + 18
 
 
-def _text(image: np.ndarray, text: str, x: int, y: int) -> None:
+def _light_label(image: np.ndarray, box: Box) -> None:
+    caption = _light_caption(box)
+    if not caption:
+        return
     try:
         import cv2
     except ImportError:
         return
-    scale = 0.62
+    height, width = image.shape[:2]
+    x1, y1, _x2, _y2 = (int(round(v)) for v in box.xyxy)
+    x1 = min(max(0, x1), width - 1)
+    y1 = min(max(0, y1), height - 1)
     font = cv2.FONT_HERSHEY_SIMPLEX
-    max_width = image.shape[1] - x - 12
-    while scale > 0.35 and max_width > 0:
+    scale = 0.45
+    (tw, th), baseline = cv2.getTextSize(caption, font, scale, 1)
+    pad = 3
+    if y1 - th - baseline - pad > _BANNER:
+        text_y = y1 - pad
+    else:
+        text_y = min(height - baseline - pad, max(_BANNER + th + pad, y1 + th + pad))
+    left = min(x1, max(0, width - tw - 2 * pad))
+    right = min(width, left + tw + 2 * pad)
+    top = max(_BANNER, text_y - th - pad)
+    bottom = min(height, text_y + baseline + pad)
+    if bottom <= top or right <= left:
+        return
+    image[top:bottom, left:right] = (18, 18, 22)
+    cv2.putText(
+        image,
+        caption,
+        (left + pad, min(text_y, bottom - baseline)),
+        font,
+        scale,
+        _box_color(box),
+        1,
+        cv2.LINE_AA,
+    )
+
+
+def _light_caption(box: Box) -> str:
+    if box.source == "pvtl" and box.label:
+        return box.label
+    if box.signal and is_light(box.label):
+        return f"{box.label} {box.signal}"
+    return ""
+
+
+def _text(
+    image: np.ndarray,
+    text: str,
+    x: int,
+    y: int,
+    scale: float = 0.62,
+    margin: int = 12,
+) -> None:
+    try:
+        import cv2
+    except ImportError:
+        return
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    max_width = image.shape[1] - x - margin
+    floor = 0.28
+    while scale > floor and max_width > 0:
         (tw, _th), _ = cv2.getTextSize(text, font, scale, 1)
         if tw <= max_width:
             break
-        scale -= 0.05
+        scale -= 0.04
     cv2.putText(image, text, (x, y), font, scale, (245, 245, 245), 1, cv2.LINE_AA)

@@ -1,12 +1,13 @@
 import numpy as np
 
 from streetseg.camera import DEMO_POSE, TELLO_CAMERA, Camera, Pose
+from streetseg.events import overlay_status
 from streetseg.fuse import FuseConfig
 from streetseg.labels import CITYSCAPES, NAMES
 from streetseg.overlay import draw_overlay
 from streetseg.pipeline import DirectionHold, Perception
 from streetseg.scene import synthetic_street
-from streetseg.types import Box
+from streetseg.types import Box, Cue
 
 
 class _Script:
@@ -143,6 +144,26 @@ def test_same_direction_is_not_said_twice():
     assert sum(event.kind == "say" for event in first) == 1
     assert sum(event.kind == "say" for event in second) == 0
     assert any(event.kind == "hint" for event in second)
+
+
+def test_overlay_status_names_the_scene_and_a_hazard():
+    raw = Cue("left", "Bear left. The way looks clear.", "open", "clear", "none", False)
+    spoken = Cue("stop", "Stop. The light looks red.", "signal", "clear", "red", False)
+    hazard = overlay_status(raw, spoken)
+    assert hazard.startswith("Hazard: Stop. The light looks red.")
+    assert "Scene:" in hazard
+    assert overlay_status(raw, raw).startswith("Scene:")
+    assert "Hazard" not in overlay_status(raw, raw)
+
+
+def test_overlay_draws_the_traffic_light_class():
+    image = np.full((180, 320, 3), 90, dtype=np.uint8)
+    labels = np.zeros(image.shape[:2], dtype=np.int32)
+    cue = Cue("straight", "Continue straight. The way looks clear.", "open", "clear", "none", False)
+    box = Box("pedestrian-red", 1.0, (80, 90, 150, 160), signal="red", source="pvtl")
+    vis = draw_overlay(image, labels, {}, [box], cue, status="Scene: Street ahead.")
+    assert vis[70:88, 82:150].mean() < 40
+    assert not np.array_equal(vis[18:28, 70:220], np.full((10, 150, 3), (18, 18, 22)))
 
 
 def test_overlay_matches_the_frame_and_draws_the_banner():

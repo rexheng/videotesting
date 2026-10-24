@@ -19,7 +19,7 @@ from dataclasses import dataclass, replace
 import numpy as np
 
 from .camera import Camera, Pose, fit_frame, ground_near_frac, locate
-from .events import Event, forward_events, obstacle_events
+from .events import Event, forward_events, obstacle_events, overlay_status
 from .fuse import FuseConfig, assess, chest_view
 from .mapillary import crosswalk_in_band
 from .overlay import draw_chest, draw_overlay
@@ -152,7 +152,15 @@ class Perception:
                 "traffic_lights": list(reading.labels),
             }
         self.boxes = drawn
-        self.image = draw_overlay(frame, labels, names, drawn, spoken, role=camera.role)
+        self.image = draw_overlay(
+            frame,
+            labels,
+            names,
+            drawn,
+            spoken,
+            role=camera.role,
+            status=overlay_status(raw, spoken),
+        )
         return forward_events(
             raw,
             spoken,

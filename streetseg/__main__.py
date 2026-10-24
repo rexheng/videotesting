@@ -2,7 +2,7 @@
 
     python -m streetseg.download
     python -m streetseg --demo
-    python -m streetseg --video clip.mp4
+    python -m streetseg --video clip.mp4 --no-show --out overlay.mp4
     python -m streetseg --webcam 0 --chest 1 --depth
     python -m streetseg --tello
     python -m streetseg --sim
@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 from .camera import (
@@ -58,7 +59,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--pitch", type=float, default=None, help="degrees, positive looks down")
     parser.add_argument("--chest-height", type=float, default=CHEST_POSE.height)
     parser.add_argument("--chest-pitch", type=float, default=CHEST_POSE.pitch)
-    parser.add_argument("--out", type=str, default="")
+    parser.add_argument("--out", type=str, default="", help="write the overlay as H.264 mp4")
+    parser.add_argument("--crf", type=int, default=23, help="libx264 CRF for --out (lower is sharper)")
     parser.add_argument("--no-show", action="store_true")
     parser.add_argument("--segmenter", choices=("mapillary", "yolo", "segformer"), default="mapillary")
     parser.add_argument("--sem-weights", default="yolo26n-sem.pt")
@@ -146,6 +148,8 @@ def _live(args) -> int:
     chest_pose = Pose(args.chest_height, args.chest_pitch)
     display = Display(enabled=not args.no_show)
     writer = {"handle": None}
+    clock = {"t0": time.perf_counter(), "n": 0}
+    print(f"device={args.device or 'cpu'} segmenter={args.segmenter}", file=sys.stderr)
 
     def on_event(event) -> None:
         print(json.dumps(event.to_dict()), flush=True)
@@ -154,8 +158,13 @@ def _live(args) -> int:
         if not args.out:
             return
         if writer["handle"] is None:
-            writer["handle"] = _writer(args.out, image.shape, _fps(source))
+            writer["handle"] = _writer(args.out, image.shape, _fps(source), args.crf)
         writer["handle"].write(image)
+        clock["n"] += 1
+        if clock["n"] == 1 or clock["n"] % 10 == 0:
+            elapsed = time.perf_counter() - clock["t0"]
+            rate = clock["n"] / elapsed if elapsed else 0.0
+            print(f"{clock['n']} frames, {rate:.2f} fps", file=sys.stderr, flush=True)
 
     try:
         play(
@@ -175,6 +184,12 @@ def _live(args) -> int:
     finally:
         if writer["handle"] is not None:
             writer["handle"].release()
+        if args.out and clock["t0"] is not None and clock["n"]:
+            elapsed = time.perf_counter() - clock["t0"]
+            print(
+                f"wrote {args.out} ({clock['n']} frames, {clock['n'] / elapsed:.2f} fps)",
+                file=sys.stderr,
+            )
     return 0
 
 
@@ -293,15 +308,11 @@ def _imwrite(path: Path, image) -> None:
         raise RuntimeError(f"could not write {path}")
 
 
-def _writer(path: str, shape, fps: float):
-    import cv2
+def _writer(path: str, shape, fps: float, crf: int = 23):
+    from .encode import H264Writer
 
     height, width = shape[:2]
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    writer = cv2.VideoWriter(path, fourcc, max(fps, 1.0), (width, height))
-    if not writer.isOpened():
-        raise RuntimeError(f"could not open {path}")
-    return writer
+    return H264Writer(path, width, height, max(float(fps), 1.0), crf=crf)
 
 
 class _FixedSeg:
