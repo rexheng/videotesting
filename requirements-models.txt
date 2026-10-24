@@ -4,6 +4,7 @@
 # Set HF_TOKEN only if huggingface.co rate-limits the machine.
 -r requirements.txt
 ultralytics>=8.4.185
+lap>=0.5.12
 torch
 torchvision
 transformers>=4.46

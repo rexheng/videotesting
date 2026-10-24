@@ -7,6 +7,15 @@ for things that are suddenly close. It does not fly the drone.
 No API key. The weights are public Ultralytics and Hugging Face checkpoints.
 Set `HF_TOKEN` only if huggingface.co rate-limits the download.
 
+The segmentation engine is [Ultralytics](https://github.com/ultralytics/ultralytics)
+(about 63k stars, AGPL-3.0, YOLO26 semantic segmentation). It is used as a
+library. Forking that monorepo into this project would replace the walking
+cue and pull AGPL across the whole tree. The other street repos are the wrong
+thing to fork for a demo that has to run this weekend:
+
+- [EckoTan0804/flying-guide-dog](https://github.com/EckoTan0804/flying-guide-dog) is the same product idea (Tello, sidewalk, traffic light, voice) but it was last pushed in February 2022, has 14 stars, and is pinned to `mmcv-full==1.2.7` with weights that lived on Google Drive.
+- [XuJiacong/PIDNet](https://github.com/XuJiacong/PIDNet) is MIT and was the real-time Cityscapes reference (PIDNet-S, 78.6 mIoU). Its weight links broke, and it does not ship a video command that downloads a Cityscapes checkpoint. YOLO26n-sem matches that accuracy and ran here at about 38 ms per 640px frame on CPU.
+
 ## What to run
 
 Drone frame, every frame it can:
@@ -65,8 +74,23 @@ python3 -m pytest
 python3 -m streetseg --demo --out streetseg/examples/waymo_style_overlay.png
 ```
 
-The demo needs no weights. Cars block the lane, people stand on the right,
-and the empty left sidewalk plus a green pedestrian signal produce "bear left".
+The synthetic demo needs no weights. Cars block the lane, people stand on the
+right, and the empty left sidewalk plus a green pedestrian signal produce
+"bear left".
+
+A real clip is already rendered at
+`streetseg/examples/street_segmentation_demo.mp4` (8 seconds, 640×360). It is
+the opening of Eli Christman's dashcam,
+[Richmond, VA to Ventnor City, NJ](https://archive.org/details/Flickr-28135600804)
+(CC BY 2.0). The author sped that recording up, so the spoken cue changes
+faster than it would on a walk. The overlay is YOLO26n-sem plus YOLO26n:
+cars read red, trees green, buildings brown, the road gray. On the CPU here,
+semantic segmentation was about 38 ms per frame and detection about 19 ms.
+
+```bash
+python3 -m streetseg --video street8.mp4 --out street_segmentation_demo.mp4 \
+  --sem-weights yolo26n-sem.pt --det-weights yolo26n.pt --device cpu
+```
 
 With weights, on a clip or the drone (video only — this does not take off):
 
