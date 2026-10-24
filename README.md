@@ -78,17 +78,17 @@ The synthetic demo needs no weights. Cars block the lane, people stand on the
 right, and the empty left sidewalk plus a green pedestrian signal produce
 "bear left".
 
-A real clip is already rendered at
-`streetseg/examples/street_segmentation_demo.mp4` (8 seconds, 640×360). It is
-the opening of Eli Christman's dashcam,
-[Richmond, VA to Ventnor City, NJ](https://archive.org/details/Flickr-28135600804)
-(CC BY 2.0). The author sped that recording up, so the spoken cue changes
-faster than it would on a walk. The overlay is YOLO26n-sem plus YOLO26n:
-cars read red, trees green, buildings brown, the road gray. On the CPU here,
+The walking demo is
+`streetseg/examples/walking_street_segmentation.mp4` (13 seconds, 640×360).
+The camera is on foot, moving down Trubarjeva, a pedestrian street in
+Ljubljana: sidewalk, people, a truck, and an excavator in the way. Source:
+Sounds of Changes,
+[Walking down the Trubarjeva street](https://commons.wikimedia.org/wiki/File:Walking_down_the_Trubarjeva_street.webm)
+(CC BY 3.0). The overlay is YOLO26n-sem plus YOLO26n. On the CPU here,
 semantic segmentation was about 38 ms per frame and detection about 19 ms.
 
 ```bash
-python3 -m streetseg --video street8.mp4 --out street_segmentation_demo.mp4 \
+python3 -m streetseg --video walk.mp4 --out walking_street_segmentation.mp4 \
   --sem-weights yolo26n-sem.pt --det-weights yolo26n.pt --device cpu
 ```
 

@@ -5,5 +5,5 @@ __pycache__/
 .pytest_cache/
 runs/
 *.mp4
-!streetseg/examples/street_segmentation_demo.mp4
+!streetseg/examples/walking_street_segmentation.mp4
 
