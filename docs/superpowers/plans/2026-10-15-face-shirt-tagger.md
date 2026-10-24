@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-15-face-shirt-tagger-design.md`
 
+> **Shipping target (2026-10-24): Arduino UNO Q.** Do not implement this plan as in-browser inference on the board. Section 7 of the spec and `docs/superpowers/specs/2026-10-24-uno-q-segmentation-audit.md` are binding. The runnable loop is `unoq/`. Recognition rules in the tasks below still apply; `unoq/face_shirt/scheduler.py` decides which model is allowed on a frame. Caps for the board: 2 faces, 2 poses, CPU delegate, 640×480 MJPG, clothes segmentation on its own frame.
+
 ## Global Constraints
 
 - No build step. Browser code is plain ES modules loaded by `index.html`; CDN imports appear **only** in `src/vision/libs.js`.
