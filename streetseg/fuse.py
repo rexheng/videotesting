@@ -17,16 +17,14 @@ import numpy as np
 
 from .camera import metric_distance
 from .labels import (
-    BLOCKING,
-    PEOPLE,
     SUDDEN_LABELS,
-    WALKABLE,
     is_crosswalk,
     is_person,
     is_stop_sign,
     is_vehicle,
     norm_label,
 )
+from .mapillary import ground_kind
 from .types import Box, ColumnScore, Cue
 
 COLUMNS = ("left", "center", "right")
@@ -74,6 +72,8 @@ def assess(
     body_shape: tuple[int, int] | None = None,
     cfg: FuseConfig | None = None,
     camera=None,
+    pedestrian: str | None = None,
+    crosswalk_pixels: bool = False,
 ) -> Cue:
     cfg = cfg or FuseConfig()
     if labels.ndim != 2:
@@ -81,9 +81,13 @@ def assess(
     height, width = labels.shape
     columns, wearer = _score_columns(labels, names, boxes, cfg)
     pick, diverted = _pick(columns, cfg)
-    crosswalk = any(is_crosswalk(box.label) for box in boxes)
+    crosswalk = any(is_crosswalk(box.label) for box in boxes) or crosswalk_pixels
+    if pedestrian == "pedestrian-green":
+        crosswalk = True
     reason = "crowd" if diverted else "clear"
     direction = {"left": "left", "right": "right", "center": "straight"}[pick.name]
+    walk_direction = direction
+    walk_reason = reason
 
     if not pick.selectable:
         direction = "stop"
@@ -107,6 +111,21 @@ def assess(
     if sudden_label and (sudden_side == "center" or sudden_side == direction):
         direction = "stop"
         reason = "sudden"
+    if pedestrian == "pedestrian-red":
+        direction = "stop"
+        signal = "red"
+        if reason not in ("blocked", "sudden", "stop-sign"):
+            reason = "signal"
+    elif pedestrian == "pedestrian-green" and reason == "signal":
+        signal = "green"
+        if pick.selectable:
+            direction = walk_direction
+            reason = walk_reason
+        else:
+            direction = "stop"
+            reason = "blocked"
+    elif pedestrian == "pedestrian-green":
+        signal = "green"
 
     crowd = _crowd(pick if direction != "stop" else pick)
     if direction in ("left", "right", "straight"):
@@ -114,7 +133,8 @@ def assess(
         crowd = _crowd(shown)
 
     speech = _speech(
-        direction, reason, crowd, signal, crosswalk, sudden_label, sudden_side
+        direction, reason, crowd, signal, crosswalk, sudden_label, sudden_side,
+        pedestrian=pedestrian,
     )
     shown_signal = signal if signal in ("red", "yellow", "green", "none") else signal
     return Cue(
@@ -161,11 +181,12 @@ def _score_columns(labels, names, boxes, cfg: FuseConfig):
     for idx, name in names.items():
         if idx < 0 or idx >= table.size:
             continue
-        if name in WALKABLE:
+        kind = ground_kind(name)
+        if kind == "walk":
             table[idx] = _WALK
-        elif name in PEOPLE:
+        elif kind == "person":
             table[idx] = _PERSON
-        elif name in BLOCKING:
+        elif kind == "block":
             table[idx] = _BLOCK
     cats = table[np.clip(labels, 0, table.size - 1)]
     wearer = _wearer(boxes, width, height) if cfg.exclude_wearer else None
@@ -398,10 +419,14 @@ def _column_named(columns, name: str) -> ColumnScore:
     return columns[1]
 
 
-def _speech(direction, reason, crowd, signal, crosswalk, sudden_label, sudden_side) -> str:
+def _speech(
+    direction, reason, crowd, signal, crosswalk, sudden_label, sudden_side, pedestrian: str | None = None,
+) -> str:
     if reason == "sudden" and sudden_label:
         where = "in front of you" if sudden_side in (None, "center") else f"on your {sudden_side}"
         return f"Stop. A {sudden_label} is close {where}."
+    if reason == "signal" and pedestrian == "pedestrian-red":
+        return "Stop. The pedestrian light is red."
     if reason == "signal":
         color = signal if signal in ("red", "yellow") else "red"
         return f"Stop. The light looks {color}."

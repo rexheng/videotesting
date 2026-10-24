@@ -9,3 +9,4 @@ transformers>=4.46
 huggingface_hub
 pillow
 djitellopy>=2.5
+gdown>=5.2

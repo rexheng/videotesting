@@ -9,5 +9,8 @@ python3 -m streetseg.download
 python3 -m streetseg.download --signs --depth
 ```
 
-That fetches YOLO26n-sem, YOLO26n, and, with the flags, the crossing-sign
-checkpoint and Depth Anything V2 Small. The files stay on this machine.
+That fetches YOLO26n-sem, YOLO26n, SegFormer-B0 trained on Mapillary Vistas
+for 160k iterations, and the PVTL ResNet-18 traffic-light classifier. The
+flags add the crossing-sign checkpoint and Depth Anything V2 Small. The files
+stay on this machine. The Mapillary and PVTL checkpoints are the Flying Guide
+Dog release, https://github.com/EckoTan0804/flying-guide-dog.

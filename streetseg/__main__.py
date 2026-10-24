@@ -60,9 +60,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--chest-pitch", type=float, default=CHEST_POSE.pitch)
     parser.add_argument("--out", type=str, default="")
     parser.add_argument("--no-show", action="store_true")
-    parser.add_argument("--segmenter", choices=("yolo", "segformer"), default="yolo")
+    parser.add_argument("--segmenter", choices=("mapillary", "yolo", "segformer"), default="mapillary")
     parser.add_argument("--sem-weights", default="yolo26n-sem.pt")
+    parser.add_argument("--seg-weights", default="segmentation/SegFormer_b0_Mapillary.pth")
     parser.add_argument("--det-weights", default="yolo26n.pt")
+    parser.add_argument("--no-lights", action="store_true", help="skip the PVTL traffic-light classifier")
+    parser.add_argument("--light-weights", default="traffic_light_classification/resnet18-best.pth")
     parser.add_argument("--signs", action="store_true")
     parser.add_argument("--sign-weights", default="")
     parser.add_argument("--depth", action="store_true")
@@ -198,12 +201,22 @@ def _models(args, need_segmenter: bool = True) -> Perception:
 
     device = args.device or None
     segmenter = None
+    lights = None
     if need_segmenter:
-        if args.segmenter == "segformer":
+        if args.segmenter == "mapillary":
+            from .mapillary_seg import MapillarySegFormer
+
+            segmenter = MapillarySegFormer(args.seg_weights, device=device)
+        elif args.segmenter == "segformer":
             segmenter = SegFormerSegmenter(device=device)
         else:
             segmenter = YoloSemanticSegmenter(args.sem_weights, imgsz=args.imgsz, device=device)
         segmenter.load()
+        if args.segmenter == "mapillary" and not args.no_lights:
+            from .lights import TrafficLightClassifier, TrafficLightReader
+
+            lights = TrafficLightReader(TrafficLightClassifier(args.light_weights, device=device))
+            lights.load()
     detector = YoloDetector(args.det_weights, imgsz=args.imgsz, device=device, track=True)
     detector.load()
     signs = None
@@ -216,7 +229,14 @@ def _models(args, need_segmenter: bool = True) -> Perception:
         depth.load()
     if segmenter is None:
         segmenter = _UnusedSeg()
-    return Perception(segmenter, detector, sign_detector=signs, depth_estimator=depth)
+    return Perception(
+        segmenter,
+        detector,
+        sign_detector=signs,
+        depth_estimator=depth,
+        lights=lights,
+        parallel=need_segmenter,
+    )
 
 
 def _chest_only(args) -> bool:
