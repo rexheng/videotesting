@@ -148,7 +148,7 @@ def _live(args) -> int:
     chest_pose = Pose(args.chest_height, args.chest_pitch)
     display = Display(enabled=not args.no_show)
     writer = {"handle": None}
-    clock = {"t0": None, "n": 0}
+    clock = {"t0": time.perf_counter(), "n": 0}
     print(f"device={args.device or 'cpu'} segmenter={args.segmenter}", file=sys.stderr)
 
     def on_event(event) -> None:
@@ -159,7 +159,6 @@ def _live(args) -> int:
             return
         if writer["handle"] is None:
             writer["handle"] = _writer(args.out, image.shape, _fps(source), args.crf)
-            clock["t0"] = time.perf_counter()
         writer["handle"].write(image)
         clock["n"] += 1
         if clock["n"] == 1 or clock["n"] % 10 == 0:
