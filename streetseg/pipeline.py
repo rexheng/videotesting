@@ -226,6 +226,18 @@ class Perception:
         return self._depth
 
 
+def parallel_for_device(device: str | None) -> bool:
+    """Overlap the segmenter and the detector.
+
+    On CPU the two networks share the cores and the pair gets slower.
+    CUDA and MPS keep the overlap. An empty device is CPU.
+    """
+    if not device:
+        return False
+    kind = str(device).strip().lower().split(":", 1)[0]
+    return kind not in ("", "cpu")
+
+
 def _names(segmenter) -> dict[int, str]:
     raw = segmenter.names
     if callable(raw):

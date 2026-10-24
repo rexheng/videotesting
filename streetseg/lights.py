@@ -102,7 +102,7 @@ class TrafficLightClassifier:
         batch = torch.stack([_prep(crop) for crop in crops_bgr])
         if self.device:
             batch = batch.to(self.device)
-        with torch.no_grad():
+        with torch.inference_mode():
             logits = self._load()(batch)
         ids = logits.argmax(dim=1).detach().cpu().tolist()
         return [PVTL_ID2NAME[int(idx)] for idx in ids]

@@ -20,6 +20,7 @@ from pathlib import Path
 import numpy as np
 
 from .labels import norm_label
+from .sampling import nearest_labels
 from .types import Box
 
 _KEEP = frozenset({
@@ -86,10 +87,7 @@ def resolve_model_dir(model_id: str) -> Path:
 
 
 def _nearest(mask: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
-    height, width = shape
-    ys = np.linspace(0, mask.shape[0] - 1, height).astype(np.int32)
-    xs = np.linspace(0, mask.shape[1] - 1, width).astype(np.int32)
-    return mask[ys][:, xs]
+    return nearest_labels(mask, shape)
 
 
 class YoloSemanticSegmenter:

@@ -36,7 +36,7 @@ from .camera import (
 )
 from .labels import NAMES
 from .live import play
-from .pipeline import Perception
+from .pipeline import Perception, parallel_for_device
 from .scene import synthetic_street
 
 
@@ -239,7 +239,7 @@ def _models(args, need_segmenter: bool = True) -> Perception:
         sign_detector=signs,
         depth_estimator=depth,
         lights=lights,
-        parallel=need_segmenter,
+        parallel=need_segmenter and parallel_for_device(device),
     )
 
 
