@@ -1,4 +1,6 @@
 .superpowers/
+__pycache__/
+*.pyc
 unoq/.venv/
 unoq/models/*.tflite
 unoq/models/*.task
