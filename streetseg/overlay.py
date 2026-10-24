@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from .mapillary import paint_bgr
+from .sampling import nearest_labels
 from .types import Box, Cue
 
 _BANNER = 64
@@ -22,13 +23,8 @@ def draw_overlay(
         raise ValueError("expected a BGR frame")
     frame = bgr
     if labels.shape[:2] != frame.shape[:2]:
-        labels = _nearest(labels, frame.shape[:2])
-    color = np.zeros_like(frame)
-    for idx, name in names.items():
-        paint = paint_bgr(name)
-        if paint is None:
-            continue
-        color[labels == idx] = paint
+        labels = nearest_labels(labels, frame.shape[:2])
+    color = _colorize(labels, names)
     out = frame.astype(np.float32) * 0.55 + color.astype(np.float32) * 0.45
     out = np.clip(out, 0, 255).astype(np.uint8)
     for box in boxes:
@@ -49,11 +45,42 @@ def draw_chest(bgr: np.ndarray, boxes: list[Box], speech: str, stop: bool) -> np
     return out
 
 
-def _nearest(mask: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
-    height, width = shape
-    ys = np.linspace(0, mask.shape[0] - 1, height).astype(np.int32)
-    xs = np.linspace(0, mask.shape[1] - 1, width).astype(np.int32)
-    return mask[ys][:, xs]
+def _colorize(labels: np.ndarray, names: dict[int, str]) -> np.ndarray:
+    """BGR class colors. One LUT lookup, same paints as the per-class loop."""
+    if (
+        labels.ndim != 2
+        or not np.issubdtype(labels.dtype, np.integer)
+        or any(idx < 0 or idx > 255 for idx in names)
+    ):
+        return _colorize_loop(labels, names)
+    lut = np.zeros((3, 256), np.uint8)
+    for idx, name in names.items():
+        paint = paint_bgr(name)
+        if paint is None:
+            continue
+        lut[:, int(idx)] = paint
+    if labels.dtype != np.uint8:
+        if labels.size:
+            lo = int(labels.min())
+            hi = int(labels.max())
+            if lo < 0 or hi > 255:
+                return _colorize_loop(labels, names)
+        lab = np.ascontiguousarray(labels, dtype=np.uint8)
+    else:
+        lab = np.ascontiguousarray(labels)
+    import cv2
+
+    return cv2.merge([cv2.LUT(lab, lut[channel]) for channel in range(3)])
+
+
+def _colorize_loop(labels: np.ndarray, names: dict[int, str]) -> np.ndarray:
+    color = np.zeros(labels.shape[:2] + (3,), np.uint8)
+    for idx, name in names.items():
+        paint = paint_bgr(name)
+        if paint is None:
+            continue
+        color[labels == idx] = paint
+    return color
 
 
 def _rectangle(image: np.ndarray, box: Box) -> None:

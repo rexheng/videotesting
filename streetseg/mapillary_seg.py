@@ -12,8 +12,17 @@ import re
 import numpy as np
 
 from .mapillary import NAMES
+from .sampling import nearest_labels
 
 _LONG_SIDE = 768
+_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+
+
+def _on_cpu(device: str | None) -> bool:
+    if not device:
+        return True
+    return str(device).split(":", 1)[0].lower() == "cpu"
 
 
 class MapillarySegFormer:
@@ -53,6 +62,10 @@ class MapillarySegFormer:
             model.eval()
             if self.device:
                 model.to(self.device)
+            # Channels-last matches argmax on real frames and is a bit faster on CPU.
+            # GPU and MPS stay contiguous; that path was not retimed here.
+            if _on_cpu(self.device):
+                model = model.to(memory_format=torch.channels_last)
             self._model = model
         return self._model
 
@@ -62,21 +75,25 @@ class MapillarySegFormer:
         model = self._load()
         height, width = bgr.shape[:2]
         resized, _scale = _resize_multiple(bgr, self.long_side)
-        rgb = resized[:, :, ::-1].astype(np.float32) / 255.0
-        mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-        std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
-        norm = (rgb - mean) / std
-        pixel = torch.from_numpy(norm.transpose(2, 0, 1)).unsqueeze(0)
-        if self.device:
+        pixel = _imagenet(resized)
+        on_cpu = _on_cpu(self.device) and pixel.device.type == "cpu"
+        if on_cpu:
+            pixel = pixel.contiguous(memory_format=torch.channels_last)
+        elif self.device:
             pixel = pixel.to(self.device)
-        with torch.no_grad():
+        with torch.inference_mode():
             logits = model(pixel_values=pixel).logits
-        upsampled = torch.nn.functional.interpolate(
-            logits, size=resized.shape[:2], mode="bilinear", align_corners=False
-        )
-        labels = upsampled.argmax(dim=1).squeeze(0).detach().cpu().numpy().astype(np.int32)
+            if on_cpu and not logits.is_contiguous():
+                logits = logits.contiguous()
+            upsampled = torch.nn.functional.interpolate(
+                logits, size=resized.shape[:2], mode="bilinear", align_corners=False
+            )
+            if on_cpu:
+                labels = _argmax_cpu(upsampled)
+            else:
+                labels = upsampled.argmax(dim=1)[0].detach().cpu().numpy().astype(np.int32)
         if labels.shape[:2] != (height, width):
-            labels = _nearest(labels, (height, width))
+            labels = nearest_labels(labels, (height, width))
         return labels
 
 
@@ -187,6 +204,27 @@ def _rename(key: str) -> str | None:
     return None
 
 
+def _imagenet(bgr: np.ndarray):
+    """RGB ImageNet norm as a contiguous NCHW batch. Same arithmetic as before."""
+    import torch
+
+    rgb = bgr[:, :, ::-1].astype(np.float32) / 255.0
+    norm = (rgb - _MEAN) / _STD
+    chw = np.ascontiguousarray(norm.transpose(2, 0, 1))
+    return torch.from_numpy(chw).unsqueeze(0)
+
+
+def _argmax_cpu(upsampled) -> np.ndarray:
+    """First-max class ids.
+
+    Argmax over channels-last is faster than over NCHW here, and it matches
+    torch's NCHW argmax. A row-wise thread pool also matched, then left extra
+    OpenMP workers that slowed the next forward, so this stays one torch op.
+    """
+    labels = upsampled[0].permute(1, 2, 0).contiguous().argmax(dim=-1)
+    return labels.numpy().astype(np.int32)
+
+
 def _resize_multiple(bgr: np.ndarray, long_side: int) -> tuple[np.ndarray, float]:
     import cv2
 
@@ -197,10 +235,3 @@ def _resize_multiple(bgr: np.ndarray, long_side: int) -> tuple[np.ndarray, float
     if resized_h == height and resized_w == width:
         return bgr, 1.0
     return cv2.resize(bgr, (resized_w, resized_h), interpolation=cv2.INTER_LINEAR), scale
-
-
-def _nearest(mask: np.ndarray, shape: tuple[int, int]) -> np.ndarray:
-    height, width = shape
-    ys = np.linspace(0, mask.shape[0] - 1, height).astype(np.int32)
-    xs = np.linspace(0, mask.shape[1] - 1, width).astype(np.int32)
-    return mask[ys][:, xs]
