@@ -3,6 +3,8 @@
 Date: 2026-10-15
 Status: Part 1 (user experience) approved by Rex in chat. Part 2 (technical design) decided by the orchestrator after research; Rex asked to proceed straight to building.
 
+**Runtime update (2026-10-24).** This product runs on an Arduino UNO Q. Section 7 is binding and replaces the in-browser inference stack below for that device. The experience in section 3, the recognition rules, and the shirt histogram still apply. See `docs/superpowers/specs/2026-10-24-uno-q-segmentation-audit.md` and `unoq/`.
+
 ## 1. Goal
 
 A web page that uses the live webcam to:
@@ -132,3 +134,23 @@ Uploaded/recorded video, cloud sync, sharing people between devices, hosting/dep
 ## 6. Planned fork: change someone's shirt colour
 
 Rex wants to fork this later to recolour a person's shirt live. Suggested approach: MediaPipe's selfie multiclass segmenter labels each pixel (background, hair, body skin, face skin, **clothes**, other). Inside the torso quad from `src/recognition/shirt.js`, shift the hue of the "clothes" pixels and keep their brightness so folds and shading survive, then draw the result to a canvas instead of showing the raw video. Keeping the shirt logic in its own module (as this design does) keeps that fork small.
+
+On the UNO Q that fork is not a second browser model. It is `--mode recolor` / `--mode both` in `unoq/`, and section 7 says when the segmenter is allowed to run.
+
+## 7. Arduino UNO Q runtime (binding)
+
+The loop runs in Python on the QRB2210, not in the page and not on the STM32U585.
+
+* Delegate: MediaPipe CPU / XNNPACK. Do not request the GPU delegate.
+* MediaPipe 1.1.1, installed with `--no-deps`, plus `opencv-python-headless==4.11.0.86`. Do not also install `opencv-contrib-python`.
+* System packages: `libegl1`, `libgles2`.
+* Capture: MJPG, 640×480, from the UVC node. Never default to `/dev/video0`.
+* At most 2 faces and 2 poses.
+* Clothes model: `selfie_multiclass_256x256.tflite` (float32, 16,371,837 bytes). Class 4 is clothes. The binary selfie model is not a substitute.
+* The face landmarker and the clothes segmenter never share a frame. Combined mode rechecks the face every 2 s and keeps a track for 2.5 s. The mask is refreshed about every 1.5 s and reused in between.
+* A frame whose measured time exceeds 2 s is followed by a cooldown frame with no new inference.
+* Hue shift keeps saturation and value. Grey shirts stay grey.
+* People are stored in a mode-`0600` file on the board. The bridge to the microcontroller carries a short label, never a frame or a mask.
+* The 2 GB board does not run this while a graphical session is open. The 4 GB board (ABX00173) does. Either board needs at least 700 MiB free before the models load, and a powered USB-C hub for the camera.
+
+`python -m face_shirt --self-check` prints the budget and exits non-zero only when those invariants break. `--run` refuses a machine that fails the host gates.

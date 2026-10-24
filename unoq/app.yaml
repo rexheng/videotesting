@@ -1,0 +1,5 @@
+name: Face and shirt segmentation
+description: "Clothes segmentation and live tagging on the UNO Q MPU. The browser only displays frames; the models run on the board."
+icon: "👕"
+ports: []
+bricks: []

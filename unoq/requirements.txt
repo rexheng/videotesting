@@ -1,0 +1,10 @@
+# Runtime dependencies for the UNO Q virtualenv.
+# mediapipe is installed separately with --no-deps. Its published
+# requirement is opencv-contrib-python, and installing that beside this
+# headless build leaves two cv2 packages in the environment.
+absl-py~=2.3
+certifi
+flatbuffers~=25.9
+numpy>=1.26,<3
+matplotlib
+opencv-python-headless==4.11.0.86

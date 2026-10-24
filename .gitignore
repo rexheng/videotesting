@@ -1,1 +1,7 @@
 .superpowers/
+unoq/.venv/
+unoq/models/*.tflite
+unoq/models/*.task
+unoq/models/*.onnx
+unoq/models/*.partial
+unoq/data/
