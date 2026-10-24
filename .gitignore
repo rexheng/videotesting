@@ -1,1 +1,11 @@
 .superpowers/
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+runs/
+weights/**
+!weights/README.md
+*.mp4
+!streetseg/examples/walking_street.mp4
+*.part
