@@ -1,1 +1,9 @@
 .superpowers/
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+runs/
+*.mp4
+!streetseg/examples/walking_street_segmentation.mp4
+
