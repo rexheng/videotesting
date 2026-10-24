@@ -47,6 +47,14 @@ class Event:
         return body
 
 
+def overlay_status(raw: Cue, spoken: Cue) -> str:
+    """One banner line: the scene event, plus the hazard event when stopping."""
+    scene = scene_text(raw)
+    if spoken.direction == "stop":
+        return f"Hazard: {spoken.speech}  Scene: {scene}"
+    return f"Scene: {scene}"
+
+
 def scene_text(cue: Cue) -> str:
     if not cue.columns:
         return "Street ahead."

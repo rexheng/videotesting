@@ -23,7 +23,7 @@ python3 -m streetseg --tello
 python3 -m streetseg --sim
 ```
 
-`q` closes the window. `--no-show` prints events and can still write `--out`. Add `--chest 1 --depth` for the chest camera. `--height` and `--pitch` are the camera pose. `--fx` and `--fy` override the focal length for the incoming frame; otherwise a Tello-like 82.6° diagonal field of view is used, and 70° horizontal for the chest camera.
+`q` closes the window. `--no-show` prints events and can still write `--out`. `--out clip.mp4` is H.264 (libx264, yuv420p, +faststart) at the source frame rate, with the segmentation blend, boxes, traffic-light class labels, and a banner that carries the scene or hazard event and the spoken line. `--crf` defaults to 23. Add `--chest 1 --depth` for the chest camera. `--height` and `--pitch` are the camera pose. `--fx` and `--fy` override the focal length for the incoming frame; otherwise a Tello-like 82.6° diagonal field of view is used, and 70° horizontal for the chest camera.
 
 Sim frames arrive as JPEG on a local WebSocket, about 5 to 10 fps. Perception listens on `127.0.0.1:8765`.
 
