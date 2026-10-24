@@ -25,7 +25,8 @@ class Display:
             if title not in self._windows:
                 cv2.namedWindow(title, cv2.WINDOW_NORMAL)
                 height, width = image.shape[:2]
-                cv2.resizeWindow(title, min(width, 1280), min(height, 960))
+                scale = min(1280 / float(width), 960 / float(height), 1.0)
+                cv2.resizeWindow(title, max(1, int(width * scale)), max(1, int(height * scale)))
                 cv2.moveWindow(title, 48, 48)
                 self._windows.add(title)
             cv2.imshow(title, image)

@@ -15,8 +15,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
+import subprocess
 import sys
 from pathlib import Path
+
+import numpy as np
 
 from .camera import (
     CHEST_POSE,
@@ -294,14 +298,73 @@ def _imwrite(path: Path, image) -> None:
 
 
 def _writer(path: str, shape, fps: float):
+    height, width = shape[:2]
+    if path.lower().endswith(".mp4") and shutil.which("ffmpeg"):
+        return _H264Writer(path, width, height, max(fps, 1.0))
     import cv2
 
-    height, width = shape[:2]
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     writer = cv2.VideoWriter(path, fourcc, max(fps, 1.0), (width, height))
     if not writer.isOpened():
         raise RuntimeError(f"could not open {path}")
     return writer
+
+
+class _H264Writer:
+    """H.264 so a browser can play the file. OpenCV's mp4v cannot."""
+
+    def __init__(self, path: str, width: int, height: int, fps: float):
+        self.width = width
+        self.height = height
+        self._proc = subprocess.Popen(
+            [
+                "ffmpeg",
+                "-y",
+                "-loglevel",
+                "error",
+                "-f",
+                "rawvideo",
+                "-pix_fmt",
+                "bgr24",
+                "-s",
+                f"{width}x{height}",
+                "-r",
+                f"{fps:.6f}",
+                "-i",
+                "-",
+                "-an",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-profile:v",
+                "high",
+                "-movflags",
+                "+faststart",
+                path,
+            ],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+
+    def isOpened(self) -> bool:
+        return self._proc.poll() is None and self._proc.stdin is not None
+
+    def write(self, image) -> None:
+        if image.shape[0] != self.height or image.shape[1] != self.width or image.shape[2] != 3:
+            raise ValueError("frame size does not match the writer")
+        if not self.isOpened():
+            raise RuntimeError("video writer closed")
+        self._proc.stdin.write(np.ascontiguousarray(image).tobytes())
+
+    def release(self) -> None:
+        if self._proc.stdin is not None:
+            self._proc.stdin.close()
+        err = self._proc.stderr.read().decode("utf-8", "replace") if self._proc.stderr else ""
+        code = self._proc.wait()
+        if code != 0:
+            raise RuntimeError(err.strip() or f"ffmpeg exited {code}")
 
 
 class _FixedSeg:

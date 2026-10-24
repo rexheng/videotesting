@@ -168,10 +168,15 @@ def test_light_box_is_colored_from_the_pixels():
     assert any(event.kind == "hazard" and event.reason == "signal" for event in events)
 
 
-def test_odd_sized_frame_is_fitted_to_960x720():
-    labels = np.full((720, 960), CITYSCAPES.index("sidewalk"), dtype=np.int32)
+def test_odd_sized_frame_keeps_its_own_shape():
+    class _AsFrame:
+        names = dict(NAMES)
+
+        def predict(self, bgr):
+            return np.full(bgr.shape[:2], CITYSCAPES.index("sidewalk"), dtype=np.int32)
+
     frame = np.zeros((180, 320, 3), dtype=np.uint8)
     camera = Camera(fx=200, fy=150, role="drone")
-    perception = Perception(_Script([labels]), _Boxes([]))
+    perception = Perception(_AsFrame(), _Boxes([]))
     perception.process(frame, camera, Pose(0, 0))
-    assert perception.image.shape == (720, 960, 3)
+    assert perception.image.shape == (180, 320, 3)

@@ -1,9 +1,9 @@
 """One pipeline for every frame source.
 
-``process(frame, camera, pose)`` returns earpiece events. The frame is BGR.
-It is resized to 960×720 when it is not already that size, and ``fx`` / ``fy``
-move with it. ``camera.role`` is ``drone`` or ``sim`` for the street view, and
-``chest`` for close obstacles.
+``process(frame, camera, pose)`` returns earpiece events. The frame is BGR
+at the size the source produced. It is not cropped and not stretched, and
+``fx`` / ``fy`` are pixels in that frame. ``camera.role`` is ``drone`` or
+``sim`` for the street view, and ``chest`` for close obstacles.
 
 Stops (blocked ground, a red or yellow light, a stop sign, something large
 and close) are said on the frame they appear. A new left, right, or straight

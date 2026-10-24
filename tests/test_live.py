@@ -1,3 +1,5 @@
+import subprocess
+
 import numpy as np
 
 from streetseg.camera import Camera, Pose
@@ -81,3 +83,33 @@ def test_display_can_stay_off():
     assert display.wait(1) == -1
     display.close()
     assert display.headless
+
+
+def test_mp4_writer_is_h264(tmp_path):
+    from streetseg.__main__ import _writer
+
+    path = tmp_path / "clip.mp4"
+    writer = _writer(str(path), (24, 32, 3), 10.0)
+    frame = np.zeros((24, 32, 3), dtype=np.uint8)
+    frame[:, :, 1] = 200
+    writer.write(frame)
+    writer.write(frame)
+    writer.release()
+    probe = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=codec_name,width,height",
+            "-of",
+            "csv=p=0",
+            str(path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert probe.stdout.strip() == "h264,32,24"
