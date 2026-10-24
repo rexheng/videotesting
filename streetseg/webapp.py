@@ -1,9 +1,9 @@
-"""Browser view of the two live street cameras.
+"""Browser view of the live street cameras.
 
-The Logitech C270 (720p) and the DJI Tello each show the raw input beside
-the segmented output. The Tello path turns the camera on and does not take
-off. This computer has to have the webcam plugged in, or be joined to the
-Tello's own Wi-Fi. A cloud machine cannot see either camera.
+The phone (DroidCam), the Logitech C270 (720p), and the DJI Tello each show
+the raw input beside the segmented output. The Tello path pulls the drone
+camera with streamon and does not take off. The phone and the Tello are
+different Wi-Fi networks. A cloud machine cannot see either radio.
 """
 
 from __future__ import annotations
@@ -23,8 +23,8 @@ _BOARDS = ("c270", "tello", "phone")
 
 _IDLE = {
     "c270": "Plug in the Logitech C270 and press Connect. It opens at 1280×720.",
-    "tello": "Power on the Tello, join its Wi-Fi, and press Connect. The camera starts. The drone stays on the ground.",
-    "phone": "Optional. Paste the IP from the DroidCam app.",
+    "tello": "Power on the Tello, join its Wi-Fi from this computer, and press Connect. This pulls the drone camera. The drone stays on the ground.",
+    "phone": "Open DroidCam and enter the IP it shows.",
 }
 
 _OPEN_ERRORS = {
@@ -68,15 +68,13 @@ _PAGE = """<!DOCTYPE html>
   img { display: block; width: 100%; max-height: 42vh; object-fit: contain; background: #000; }
   .status { margin-top: 10px; }
   .meta { color: #8e99a3; font-size: 14px; min-height: 1.2em; }
-  details { color: #b7c0c8; }
-  details .board { margin-top: 12px; }
   @media (max-width: 720px) { .pair { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
 <main>
   <h1>Kite street</h1>
-  <p class="lead">Two live cameras. Each one shows the input feed beside the segmented output feed. The picture updates as fast as the model finishes a frame.</p>
+  <p class="lead">Each camera shows the input feed beside the segmented output. The phone row reads DroidCam. The DJI Tello row pulls the drone camera and leaves the drone on the ground. The picture updates as fast as the model finishes a frame.</p>
 
   <section class="board" id="board-c270">
     <div class="board-head">
@@ -103,11 +101,38 @@ _PAGE = """<!DOCTYPE html>
     <p class="meta" id="c270-meta"></p>
   </section>
 
+  <section class="board" id="board-phone">
+    <div class="board-head">
+      <div>
+        <h2>Phone</h2>
+        <p class="spec">DroidCam on the same Wi-Fi · http://phone:4747/video</p>
+      </div>
+      <form id="phone-form" data-board="phone">
+        <label for="ip">Phone</label>
+        <input id="ip" name="ip" placeholder="192.168.0.20" autocomplete="off" inputmode="decimal">
+        <input name="port" value="4747" inputmode="numeric" aria-label="port">
+        <button type="submit">Connect phone</button>
+      </form>
+    </div>
+    <div class="pair">
+      <figure>
+        <figcaption>Input feed</figcaption>
+        <img id="phone-input" alt="Phone input feed" hidden>
+      </figure>
+      <figure>
+        <figcaption>Output feed</figcaption>
+        <img id="phone-output" alt="Phone segmentation" hidden>
+      </figure>
+    </div>
+    <p class="status" id="phone-text">Open DroidCam and enter the IP it shows.</p>
+    <p class="meta" id="phone-meta"></p>
+  </section>
+
   <section class="board" id="board-tello">
     <div class="board-head">
       <div>
         <h2>DJI Tello</h2>
-        <p class="spec">Drone camera · stream on · stays on the ground</p>
+        <p class="spec">Pulls the drone camera · stream on · stays on the ground</p>
       </div>
       <div>
         <button class="drone" id="tello" type="button">Connect</button>
@@ -123,34 +148,9 @@ _PAGE = """<!DOCTYPE html>
         <img id="tello-output" alt="Tello segmentation" hidden>
       </figure>
     </div>
-    <p class="status" id="tello-text">Power on the Tello, join its Wi-Fi, and press Connect. The camera starts. The drone stays on the ground.</p>
+    <p class="status" id="tello-text">Power on the Tello, join its Wi-Fi from this computer, and press Connect. This pulls the drone camera. The drone stays on the ground.</p>
     <p class="meta" id="tello-meta"></p>
   </section>
-
-  <details>
-    <summary>Phone URL</summary>
-    <section class="board" id="board-phone">
-      <form id="phone-form" data-board="phone">
-        <label for="ip">Phone</label>
-        <input id="ip" name="ip" placeholder="192.168.0.20" autocomplete="off" inputmode="decimal">
-        <input name="port" value="4747" inputmode="numeric" aria-label="port">
-        <button type="submit">Connect phone</button>
-      </form>
-      <p class="spec">DroidCam on the same Wi-Fi. The feed is http://phone:4747/video.</p>
-      <div class="pair">
-        <figure>
-          <figcaption>Input feed</figcaption>
-          <img id="phone-input" alt="Phone input feed" hidden>
-        </figure>
-        <figure>
-          <figcaption>Output feed</figcaption>
-          <img id="phone-output" alt="Phone segmentation" hidden>
-        </figure>
-      </div>
-      <p class="status" id="phone-text">Optional. Paste the IP from the DroidCam app.</p>
-      <p class="meta" id="phone-meta"></p>
-    </section>
-  </details>
 </main>
 <script>
 const boards = ["c270", "tello", "phone"];
@@ -384,6 +384,10 @@ class SegmentFeed:
                     if getattr(source, "ended", False):
                         self._fail(f"The {label} feed stopped.")
                         break
+                    if label == "Tello" and self._frames == 0:
+                        with self._lock:
+                            if not self._error:
+                                self._text = "The Tello camera is on. Waiting for the first picture."
                     time.sleep(0.02)
                     continue
                 camera = self.camera

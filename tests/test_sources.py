@@ -184,11 +184,10 @@ def test_tello_source_streams_and_does_not_take_off(monkeypatch):
     from streetseg.sources import TelloSource
 
     calls = []
-    frame = np.zeros((720, 960, 3), dtype=np.uint8)
 
     class Reader:
         def __init__(self):
-            self.frame = frame
+            self.frame = np.zeros((300, 400, 3), dtype=np.uint8)
 
     class FakeTello:
         def connect(self):
@@ -215,12 +214,16 @@ def test_tello_source_streams_and_does_not_take_off(monkeypatch):
     monkeypatch.setitem(sys.modules, "djitellopy", module)
     source = TelloSource()
     try:
+        assert source.read() is None
+        picture = np.full((720, 960, 3), 30, dtype=np.uint8)
+        source.reader.frame = picture
         got = source.read()
         got[:] = 255
         again = source.read()
         assert again is not None
-        assert int(again.mean()) == 0
+        assert int(again.mean()) == 30
         assert got.shape == (720, 960, 3)
+        assert not np.shares_memory(got, picture)
     finally:
         source.close()
     assert calls == ["connect", "streamon", "get_frame_read", "streamoff", "end"]

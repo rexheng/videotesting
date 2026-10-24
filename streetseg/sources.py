@@ -114,13 +114,21 @@ class WebcamSource:
 
 
 class TelloSource:
-    """DJI Tello video via djitellopy. Connects and calls streamon only."""
+    """DJI Tello video via djitellopy. Connects and calls streamon only.
+
+    The decoder starts on a black placeholder. Those frames are skipped until
+    the drone camera sends a real picture. This path never takes off.
+    """
 
     ended = False
 
     def __init__(self):
-        from djitellopy import Tello
+        try:
+            from djitellopy import Tello
+        except ImportError as exc:
+            raise RuntimeError("Install djitellopy to pull the Tello camera.") from exc
 
+        self._got_frame = False
         self.tello = Tello()
         self.tello.connect()
         self.tello.streamon()
@@ -130,6 +138,9 @@ class TelloSource:
         frame = self.reader.frame
         if frame is None:
             return None
+        if not self._got_frame and int(np.max(frame)) == 0:
+            return None
+        self._got_frame = True
         return frame.copy()
 
     def close(self) -> None:

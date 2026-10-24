@@ -52,12 +52,14 @@ def test_page_puts_each_input_feed_beside_its_output():
     from streetseg.webapp import _PAGE
 
     assert "grid-template-columns: 1fr 1fr" in _PAGE
-    assert _PAGE.index("Logitech C270") < _PAGE.index("DJI Tello")
-    assert _PAGE.index("DJI Tello") < _PAGE.index("Phone URL")
-    for board in ("board-c270", "board-tello"):
+    assert _PAGE.index('id="board-c270"') < _PAGE.index('id="board-phone"')
+    assert _PAGE.index('id="board-phone"') < _PAGE.index('id="board-tello"')
+    assert "<details" not in _PAGE
+    for board in ("board-c270", "board-phone", "board-tello"):
         block = _PAGE.split(f'id="{board}"', 1)[1].split("<section", 1)[0]
         assert block.index("Input feed") < block.index("Output feed")
     assert "1280×720" in _PAGE
+    assert "Pulls the drone camera" in _PAGE
     assert "stays on the ground" in _PAGE
 
 
