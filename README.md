@@ -27,6 +27,21 @@ python3 -m streetseg --sim
 
 `--webcam` and `--tello` are live sources. The loop finishes the frame it has before it reads another, so on a CPU the window lags a 30 fps camera. `--device` sends the models to a GPU when one is present.
 
+## C270 and Tello in the browser
+
+```bash
+python3 -m streetseg --web
+python3 -m streetseg --web --webcam 0 --tello
+```
+
+Open `http://127.0.0.1:8080`. The page has two cameras. Each one shows the input feed beside the segmented output feed.
+
+The Logitech C270 is the webcam. Plug it into this computer and press Connect. The capture asks for 1280×720. The focal length uses Logitech's published 60° field of view. The camera number is 0 unless another camera already has that slot.
+
+The DJI Tello is the drone camera. Power it on, join its Wi-Fi from this computer, and press Connect. That path calls `streamon` only. It does not take off. The focal length uses the Tello's 82.6° diagonal field of view.
+
+Both can run together. Each camera has its own segmentation, so a direction from the webcam does not mix with a direction from the drone. A machine somewhere else on the internet cannot open either camera. `--web-host 0.0.0.0` lets another device on that same network open the page. A DroidCam phone is still available under Phone URL, as `http://phone:4747/video`.
+
 Sim frames arrive as JPEG on a local WebSocket, about 5 to 10 fps. Perception listens on `127.0.0.1:8765`.
 
 ```bash
