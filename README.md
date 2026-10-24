@@ -6,7 +6,7 @@ One pipeline for the drone, the sim, a video file, a webcam, and the chest camer
 process(frame, camera, pose) -> events
 ```
 
-`frame` is BGR, fitted to 960×720. `camera` holds `fx` and `fy`. `pose` is the camera's height in meters and its pitch in degrees, positive looking down. A wide frame is cropped to 4:3 before that resize, so people are not stretched.
+`frame` is BGR at the size the source produced. `camera` holds `fx` and `fy` in pixels of that frame. `pose` is the camera's height in meters and its pitch in degrees, positive looking down. The frame is not cropped or stretched, so a portrait phone video stays portrait.
 
 The drone or sim view is segmented in the Waymo style: walkable ground, people, vehicles, signals. The chest camera reports close obstacles. Kite has no glasses, so a direction is not a turn of -1, 0, or +1. "Bear left" goes out as a `say` with priority `nav`, and as a `hint` the judgment layer can use.
 
@@ -23,7 +23,9 @@ python3 -m streetseg --tello
 python3 -m streetseg --sim
 ```
 
-`q` closes the window. `--no-show` prints events and can still write `--out`. Add `--chest 1 --depth` for the chest camera. `--height` and `--pitch` are the camera pose. `--fx` and `--fy` override the focal length for the incoming frame; otherwise a Tello-like 82.6° diagonal field of view is used, and 70° horizontal for the chest camera.
+`q` closes the window. `--no-show` prints events and can still write `--out`. An `.mp4` is H.264, so a browser can play it. Add `--chest 1 --depth` for the chest camera. `--height` and `--pitch` are the camera pose. `--fx` and `--fy` override the focal length for the incoming frame; otherwise a Tello-like 82.6° diagonal field of view is used, and 70° horizontal for the chest camera.
+
+`--webcam` and `--tello` are live sources. The loop finishes the frame it has before it reads another, so on a CPU the window lags a 30 fps camera. `--device` sends the models to a GPU when one is present.
 
 Sim frames arrive as JPEG on a local WebSocket, about 5 to 10 fps. Perception listens on `127.0.0.1:8765`.
 

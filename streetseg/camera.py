@@ -1,8 +1,8 @@
 """Camera intrinsics and the camera's pose.
 
-``process`` wants a BGR frame at 960×720. ``fx`` and ``fy`` are in pixels for
-the frame that is passed in; :func:`fit_frame` rescales them when it resizes.
-Pitch is degrees, positive looking down. Height is meters above the ground.
+``process`` keeps the BGR frame at the size the source produced. ``fx`` and
+``fy`` are in pixels of that frame. Pitch is degrees, positive looking down.
+Height is meters above the ground.
 """
 
 from __future__ import annotations
@@ -148,53 +148,16 @@ def locate(box: Box, camera: Camera, shape: tuple[int, int]) -> dict[str, float]
 
 
 def fit_frame(frame: np.ndarray, camera: Camera) -> tuple[np.ndarray, Camera]:
-    """Return a contiguous BGR 960×720 frame and intrinsics in that frame.
+    """Return the whole frame and intrinsics for that frame.
 
-    A wider or taller picture is cropped to 4:3 before the resize, so people
-    are not stretched. A wide frame loses the side edges. A tall frame loses
-    the top and keeps the ground.
+    Nothing is cropped and nothing is stretched. A portrait phone frame stays
+    portrait, so the sky, the signals, and a far crossing stay in view. A
+    network that wants a fixed input size resizes on its own and paints the
+    mask back onto this frame.
     """
     if not isinstance(frame, np.ndarray) or frame.ndim != 3 or frame.shape[2] != 3:
         raise ValueError("frame must be a BGR image")
     height, width = frame.shape[:2]
     if height < 2 or width < 2:
         raise ValueError("frame is empty")
-    frame, camera = _crop_to_four_three(frame, camera)
-    height, width = frame.shape[:2]
-    if width == FRAME_W and height == FRAME_H:
-        return np.ascontiguousarray(frame), camera.centered(width, height)
-    sx = FRAME_W / float(width)
-    sy = FRAME_H / float(height)
-    return _resize(frame, FRAME_W, FRAME_H), camera.scaled(sx, sy, width, height)
-
-
-def _crop_to_four_three(frame: np.ndarray, camera: Camera) -> tuple[np.ndarray, Camera]:
-    height, width = frame.shape[:2]
-    target = FRAME_W / float(FRAME_H)
-    aspect = width / float(height)
-    if abs(aspect - target) <= 0.02:
-        return frame, camera
-    if aspect > target:
-        new_w = min(max(int(round(height * target)), 2), width)
-        x0 = (width - new_w) // 2
-        cropped = frame[:, x0:x0 + new_w]
-        cx = (camera.cx if camera.cx is not None else width / 2.0) - x0
-        cy = camera.cy if camera.cy is not None else height / 2.0
-        return cropped, Camera(camera.fx, camera.fy, camera.role, cx, cy)
-    new_h = min(max(int(round(width / target)), 2), height)
-    y0 = height - new_h
-    cropped = frame[y0:y0 + new_h]
-    cx = camera.cx if camera.cx is not None else width / 2.0
-    cy = (camera.cy if camera.cy is not None else height / 2.0) - y0
-    return cropped, Camera(camera.fx, camera.fy, camera.role, cx, cy)
-
-
-def _resize(frame: np.ndarray, width: int, height: int) -> np.ndarray:
-    try:
-        import cv2
-
-        return cv2.resize(frame, (width, height), interpolation=cv2.INTER_AREA)
-    except ImportError:
-        ys = np.linspace(0, frame.shape[0] - 1, height).astype(np.int32)
-        xs = np.linspace(0, frame.shape[1] - 1, width).astype(np.int32)
-        return np.ascontiguousarray(frame[ys][:, xs])
+    return np.ascontiguousarray(frame), camera.centered(width, height)
