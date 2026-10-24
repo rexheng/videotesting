@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .labels import PALETTE
+from .mapillary import paint_bgr
 from .types import Box, Cue
 
 _BANNER = 64
@@ -25,7 +25,7 @@ def draw_overlay(
         labels = _nearest(labels, frame.shape[:2])
     color = np.zeros_like(frame)
     for idx, name in names.items():
-        paint = PALETTE.get(name)
+        paint = paint_bgr(name)
         if paint is None:
             continue
         color[labels == idx] = paint
@@ -34,7 +34,7 @@ def draw_overlay(
     for box in boxes:
         _rectangle(out, box)
     _banner(out, cue, role)
-    _legend(out)
+    _legend(out, names)
     return out
 
 
@@ -119,17 +119,24 @@ def _glyph(image: np.ndarray, direction: str) -> None:
             image[y, 14:48 - inset] = color
 
 
-def _legend(image: np.ndarray) -> None:
+def _legend(image: np.ndarray, names: dict[int, str] | None = None) -> None:
     try:
         import cv2
     except ImportError:
         return
-    items = (
-        ("sidewalk", "walk"),
-        ("person", "person"),
-        ("car", "vehicle"),
-        ("traffic light", "signal"),
-    )
+    known = set(names.values()) if names else set()
+    items = []
+    for caption, options in (
+        ("walk", ("Sidewalk", "sidewalk")),
+        ("crossing", ("Crosswalk - Plain", "Lane Marking - Crosswalk")),
+        ("person", ("Person", "person")),
+        ("vehicle", ("Car", "car")),
+        ("signal", ("Traffic Light", "traffic light")),
+    ):
+        name = next((option for option in options if option in known or not known), None)
+        if known and name not in known:
+            continue
+        items.append((name, caption))
     bar = 28
     if image.shape[0] <= _BANNER + bar:
         return
@@ -141,7 +148,10 @@ def _legend(image: np.ndarray) -> None:
     for name, caption in items:
         if x + 80 >= image.shape[1]:
             break
-        image[y1 + 7:y1 + 21, x:x + 16] = PALETTE[name]
+        swatch = paint_bgr(name)
+        if swatch is None:
+            continue
+        image[y1 + 7:y1 + 21, x:x + 16] = swatch
         cv2.putText(image, caption, (x + 22, y1 + 18), font, scale, (245, 245, 245), 1, cv2.LINE_AA)
         (tw, _th), _ = cv2.getTextSize(caption, font, scale, 1)
         x += 22 + tw + 18

@@ -66,9 +66,9 @@ def resolve_weights(path: str | Path) -> Path:
     candidate = Path(path)
     if candidate.exists():
         return candidate.resolve()
-    # A bare filename is looked up in weights/. An explicit missing path is an error.
-    if candidate.parent == Path("."):
-        bundled = _ROOT / candidate.name
+    # A relative path is looked up under weights/. An absolute missing path is an error.
+    if not candidate.is_absolute():
+        bundled = _ROOT / candidate
         if bundled.exists():
             return bundled.resolve()
     raise _missing(path)

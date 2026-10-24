@@ -31,22 +31,38 @@ SIGNS_FILE = "best.pt"
 DEPTH_REPO = "depth-anything/Depth-Anything-V2-Small-hf"
 SEGFORMER_REPO = "nvidia/segformer-b0-finetuned-cityscapes-1024-1024"
 
+# Flying Guide Dog release: SegFormer-B0 Mapillary 160k, and the PVTL ResNet-18.
+# https://drive.google.com/drive/folders/1efvfGxh2f1nCppO9YaPn6SyUQjG--QkC
+GUIDE_DOG = {
+    "segmentation/SegFormer_b0_Mapillary.pth": ("1oEkJ7v4pPMVxilPmsZxIupt4zZE9WiB7", 30_000_000),
+    "traffic_light_classification/resnet18-best.pth": ("1ILy6VpMcgIPb2INd6gk3JxCIRR9xpnR1", 30_000_000),
+}
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Download street-perception weights. Not used at runtime.")
     parser.add_argument("--signs", action="store_true", help="crossing-sign checkpoint")
     parser.add_argument("--depth", action="store_true", help="Depth Anything V2 Small, for the chest camera")
     parser.add_argument("--segformer", action="store_true", help="SegFormer-B0 Cityscapes fallback")
-    parser.add_argument("--all", action="store_true", help="YOLO weights, signs, depth, and SegFormer")
+    parser.add_argument("--mapillary", action="store_true", help="SegFormer-B0 Mapillary and the PVTL ResNet-18")
+    parser.add_argument("--all", action="store_true", help="YOLO, Mapillary, PVTL, signs, depth, and Cityscapes SegFormer")
     args = parser.parse_args(argv)
-    fetch(signs=args.signs or args.all, depth=args.depth or args.all, segformer=args.segformer or args.all)
+    fetch(
+        signs=args.signs or args.all,
+        depth=args.depth or args.all,
+        segformer=args.segformer or args.all,
+        mapillary=args.mapillary or args.all or not (args.signs or args.depth or args.segformer),
+    )
     return 0
 
 
-def fetch(signs: bool = False, depth: bool = False, segformer: bool = False) -> None:
+def fetch(signs: bool = False, depth: bool = False, segformer: bool = False, mapillary: bool = False) -> None:
     ROOT.mkdir(parents=True, exist_ok=True)
     for name, (url, min_bytes) in YOLO.items():
         _http(url, ROOT / name, min_bytes)
+    if mapillary:
+        for name, (file_id, min_bytes) in GUIDE_DOG.items():
+            _gdrive(file_id, ROOT / name, min_bytes)
     if signs:
         _hub_file(SIGNS_REPO, SIGNS_FILE, ROOT / "signs")
     if depth:
@@ -70,6 +86,20 @@ def _http(url: str, dest: Path, min_bytes: int) -> None:
         tmp.unlink(missing_ok=True)
         raise RuntimeError(f"{dest.name} downloaded smaller than expected")
     tmp.replace(dest)
+
+
+def _gdrive(file_id: str, dest: Path, min_bytes: int) -> None:
+    if dest.is_file() and dest.stat().st_size >= min_bytes:
+        print(f"have {dest.name}")
+        return
+    import gdown
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    print(f"downloading {dest.name}")
+    gdown.download(id=file_id, output=str(dest), quiet=False)
+    if not dest.is_file() or dest.stat().st_size < min_bytes:
+        dest.unlink(missing_ok=True)
+        raise RuntimeError(f"{dest.name} downloaded smaller than expected")
 
 
 def _hub_file(repo: str, filename: str, dest: Path) -> None:

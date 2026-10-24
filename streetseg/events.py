@@ -98,12 +98,15 @@ def forward_events(
     say: bool,
     pending: str,
     stable: int,
+    extra: dict | None = None,
 ) -> list[Event]:
     """Scene from this frame. Say and hint follow the direction that has held."""
     detail = _columns(raw)
     detail["seen"] = raw.direction
     detail["pending"] = pending
     detail["stable_frames"] = stable
+    if extra:
+        detail.update(extra)
     events = [
         Event("scene", source, "info", scene_text(raw), spoken.direction, raw.reason, detail)
     ]

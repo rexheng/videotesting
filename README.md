@@ -56,14 +56,18 @@ Each line of output is one JSON event.
 
 Rex's choice, loaded from `weights/` and never downloaded while perception is running:
 
+The live street view runs two models on each frame at once. SegFormer-B0 paints the Mapillary map. As soon as that mask exists, traffic-light blobs are cropped out of it and classified, while the box detector is still running.
+
 | Job | Weights |
 |---|---|
-| Semantic map | YOLO26n-sem, Cityscapes |
+| Street view | SegFormer-B0, Mapillary Vistas, 160k iterations. Includes plain crossings and zebra markings. |
+| Traffic lights | PVTL ResNet-18. Others, pedestrian red, pedestrian green, vehicle red, vehicle green. A pedestrian red stops on that frame. A pedestrian green has to win seven frames. |
 | Boxes | YOLO26n |
+| Cityscapes map, optional | YOLO26n-sem (`--segmenter yolo`) |
 | Crossing signs, optional | `cvtechniques/TrafficSignDetection` (`--signs`) |
 | Chest depth, optional | Depth Anything V2 Small (`--depth`) |
 
-RF-DETR is a box detector. It does not paint the Cityscapes ground the cue is scored on, and YOLO26n already supplies the boxes, so it is not in this loop.
+The two street models are the ones from [Flying Guide Dog](https://github.com/EckoTan0804/flying-guide-dog) (Tan et al., IEEE ROBIO 2021). This loop does not fly the drone. PVTL is their five-class set, cropped from Cityscapes, Mapillary Vistas, and PedestrianLights.
 
 ```bash
 python3 -m pip install -r requirements-models.txt
