@@ -5,6 +5,8 @@
     python -m streetseg --video clip.mp4
     python -m streetseg --webcam 0 --chest 1 --depth
     python -m streetseg --tello
+    python -m streetseg --web
+    python -m streetseg --web --webcam 0 --tello
     python -m streetseg --sim
     python -m streetseg --send clip.mp4
 
@@ -45,9 +47,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--demo", action="store_true", help="synthetic street, no weights")
     parser.add_argument("--download", action="store_true", help="fetch weights, then exit")
     parser.add_argument("--video", type=str, default="", help="mp4 or avi")
-    parser.add_argument("--webcam", type=int, default=None, help="forward camera index")
+    parser.add_argument("--webcam", type=int, default=None, help="camera index. With --web, the Logitech C270 at 1280×720")
     parser.add_argument("--chest", type=int, default=None, help="chest camera index")
     parser.add_argument("--tello", action="store_true", help="Tello stream; does not take off")
+    parser.add_argument("--web", action="store_true", help="browser page: C270 and Tello, input feed beside output feed")
+    parser.add_argument("--droidcam", default="", help="optional phone IP or http://ip:4747/video")
+    parser.add_argument("--web-host", default="127.0.0.1")
+    parser.add_argument("--web-port", type=int, default=8080)
     parser.add_argument("--sim", action="store_true", help="listen for sim JPEG frames")
     parser.add_argument("--sim-port", type=int, default=8765)
     parser.add_argument("--sim-url", type=str, default="", help="connect out instead of listening")
@@ -81,6 +87,8 @@ def main(argv: list[str] | None = None) -> int:
     if (args.fx is None) != (args.fy is None):
         parser.error("--fx and --fy are set together")
 
+    if args.web:
+        return _web(args)
     if args.download:
         from .download import main as download_main
 
@@ -129,6 +137,48 @@ def _demo(args) -> int:
                 if display.wait(30) in (ord("q"), 27, -1):
                     break
         display.close()
+    return 0
+
+
+def _web(args) -> int:
+    from .sources import C270_DIAGONAL_FOV, open_c270, open_file, open_tello
+    from .webapp import LiveBoards, droidcam_url, serve
+
+    role = args.role or "drone"
+
+    def factory():
+        return _models(args, need_segmenter=role != "chest")
+
+    boards = LiveBoards(
+        factory,
+        _camera(args, role),
+        _pose(args, role),
+        camera_fns=None
+        if args.fx
+        else {
+            "c270": _fov_camera(args, role, C270_DIAGONAL_FOV),
+            "tello": _fov_camera(args, role, 82.6),
+            "phone": _fov_camera(args, role, 82.6),
+        },
+        tello_factory=open_tello,
+        c270_factory=open_c270,
+    )
+    if args.webcam is not None:
+        boards.connect_c270(args.webcam)
+    if args.tello:
+        boards.connect_tello()
+    if args.droidcam:
+        boards.connect_url(droidcam_url(args.droidcam))
+    elif args.video and args.webcam is None:
+        boards.connect_source(lambda: open_file(args.video), "Video", "c270")
+    host = args.web_host
+    print(f"Open http://{host}:{args.web_port}", file=sys.stderr)
+    if host in ("0.0.0.0", "::"):
+        print(f"On this machine that is http://127.0.0.1:{args.web_port}", file=sys.stderr)
+    try:
+        serve(boards, host, args.web_port)
+    finally:
+        boards.close()
     return 0
 
 
@@ -182,7 +232,7 @@ def _live(args) -> int:
     return 0
 
 
-def _fov_camera(args, role: str):
+def _fov_camera(args, role: str, default_fov: float = 82.6):
     ready = {"yes": False}
 
     def apply(frame, camera: Camera) -> Camera:
@@ -193,7 +243,7 @@ def _fov_camera(args, role: str):
         if role == "chest":
             focal = focal_from_horizontal_fov(width, fov if fov is not None else 70.0)
         else:
-            focal = focal_length(width, height, fov if fov is not None else 82.6)
+            focal = focal_length(width, height, fov if fov is not None else default_fov)
         ready["yes"] = True
         return Camera(focal, focal, camera.role)
 

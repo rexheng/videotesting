@@ -29,6 +29,12 @@ _KITE = {
     "tello": ("TelloSource", "open_tello"),
 }
 
+# Logitech C270: 720p UVC webcam. The published field of view is 60°.
+C270_WIDTH = 1280
+C270_HEIGHT = 720
+C270_FPS = 30.0
+C270_DIAGONAL_FOV = 60.0
+
 
 class VideoFileSource:
     def __init__(self, path: str | Path):
@@ -63,14 +69,37 @@ class VideoFileSource:
         self.cap.release()
 
 
+def configure_capture(cap, width: int | None = None, height: int | None = None, fps: float | None = None) -> None:
+    """Ask a UVC camera for a size. MJPEG lets the C270 deliver 720p."""
+    import cv2
+
+    def _set(prop, value) -> None:
+        if prop is None:
+            return
+        try:
+            cap.set(prop, value)
+        except cv2.error:
+            return
+
+    _set(getattr(cv2, "CAP_PROP_BUFFERSIZE", None), 1)
+    if width and height:
+        _set(getattr(cv2, "CAP_PROP_FOURCC", None), cv2.VideoWriter_fourcc(*"MJPG"))
+        _set(getattr(cv2, "CAP_PROP_FRAME_WIDTH", None), int(width))
+        _set(getattr(cv2, "CAP_PROP_FRAME_HEIGHT", None), int(height))
+    if fps:
+        _set(getattr(cv2, "CAP_PROP_FPS", None), float(fps))
+
+
 class WebcamSource:
-    def __init__(self, index: int = 0):
+    def __init__(self, index: int = 0, width: int | None = None, height: int | None = None, fps: float | None = None):
         import cv2
 
         self.cap = cv2.VideoCapture(index)
         if not self.cap.isOpened():
             raise RuntimeError(f"could not open camera {index}")
+        configure_capture(self.cap, width, height, fps)
         self.ended = False
+        self.failed_open = False
 
     def read(self) -> np.ndarray | None:
         ok, frame = self.cap.read()
@@ -85,13 +114,21 @@ class WebcamSource:
 
 
 class TelloSource:
-    """DJI Tello video via djitellopy. Connects and calls streamon only."""
+    """DJI Tello video via djitellopy. Connects and calls streamon only.
+
+    The decoder starts on a black placeholder. Those frames are skipped until
+    the drone camera sends a real picture. This path never takes off.
+    """
 
     ended = False
 
     def __init__(self):
-        from djitellopy import Tello
+        try:
+            from djitellopy import Tello
+        except ImportError as exc:
+            raise RuntimeError("Install djitellopy to pull the Tello camera.") from exc
 
+        self._got_frame = False
         self.tello = Tello()
         self.tello.connect()
         self.tello.streamon()
@@ -101,6 +138,9 @@ class TelloSource:
         frame = self.reader.frame
         if frame is None:
             return None
+        if not self._got_frame and int(np.max(frame)) == 0:
+            return None
+        self._got_frame = True
         return frame.copy()
 
     def close(self) -> None:
@@ -156,6 +196,11 @@ def open_webcam(index: int = 0):
     if adopted is not None:
         return adopted
     return WebcamSource(index)
+
+
+def open_c270(index: int = 0):
+    """Logitech C270 at 1280×720. This reader always requests that size."""
+    return WebcamSource(index, width=C270_WIDTH, height=C270_HEIGHT, fps=C270_FPS)
 
 
 def open_tello():

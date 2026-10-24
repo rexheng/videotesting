@@ -141,3 +141,89 @@ def test_decode_rejects_a_text_frame_without_jpeg():
         assert "jpeg" in str(exc)
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_c270_capture_asks_for_720p(monkeypatch):
+    import cv2
+
+    from streetseg.sources import C270_DIAGONAL_FOV, C270_FPS, C270_HEIGHT, C270_WIDTH, open_c270
+
+    sets = []
+
+    class Cap:
+        def set(self, prop, value):
+            sets.append((prop, value))
+            return True
+
+        def isOpened(self):
+            return True
+
+        def read(self):
+            return True, np.zeros((C270_HEIGHT, C270_WIDTH, 3), dtype=np.uint8)
+
+        def release(self):
+            return None
+
+    monkeypatch.setattr(cv2, "VideoCapture", lambda index: sets.append(("open", index)) or Cap())
+    source = open_c270(2)
+    try:
+        frame = source.read()
+    finally:
+        source.close()
+    assert frame.shape == (C270_HEIGHT, C270_WIDTH, 3)
+    props = {prop: value for prop, value in sets if isinstance(prop, int)}
+    assert ("open", 2) in sets
+    assert props[cv2.CAP_PROP_FRAME_WIDTH] == C270_WIDTH
+    assert props[cv2.CAP_PROP_FRAME_HEIGHT] == C270_HEIGHT
+    assert props[cv2.CAP_PROP_FPS] == C270_FPS
+    assert props[cv2.CAP_PROP_FOURCC] == cv2.VideoWriter_fourcc(*"MJPG")
+    assert C270_DIAGONAL_FOV == 60.0
+
+
+def test_tello_source_streams_and_does_not_take_off(monkeypatch):
+    from streetseg.sources import TelloSource
+
+    calls = []
+
+    class Reader:
+        def __init__(self):
+            self.frame = np.zeros((300, 400, 3), dtype=np.uint8)
+
+    class FakeTello:
+        def connect(self):
+            calls.append("connect")
+
+        def streamon(self):
+            calls.append("streamon")
+
+        def get_frame_read(self):
+            calls.append("get_frame_read")
+            return Reader()
+
+        def takeoff(self):
+            calls.append("takeoff")
+
+        def streamoff(self):
+            calls.append("streamoff")
+
+        def end(self):
+            calls.append("end")
+
+    module = types.ModuleType("djitellopy")
+    module.Tello = FakeTello
+    monkeypatch.setitem(sys.modules, "djitellopy", module)
+    source = TelloSource()
+    try:
+        assert source.read() is None
+        picture = np.full((720, 960, 3), 30, dtype=np.uint8)
+        source.reader.frame = picture
+        got = source.read()
+        got[:] = 255
+        again = source.read()
+        assert again is not None
+        assert int(again.mean()) == 30
+        assert got.shape == (720, 960, 3)
+        assert not np.shares_memory(got, picture)
+    finally:
+        source.close()
+    assert calls == ["connect", "streamon", "get_frame_read", "streamoff", "end"]
